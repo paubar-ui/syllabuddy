@@ -42,6 +42,54 @@ describe("store", () => {
     expect(s.deliverables.every((d) => d.loggedMinutes === 0)).toBe(true);
   });
 
+  it("focus minutes count once: a full session + checking off doesn't double the minutes", () => {
+    useStore.getState().loadDemo(TODAY);
+    const block = useStore.getState().blocks.find((b) => b.date === TODAY && b.minutes > 25)!;
+    useStore.getState().logFocus(block.id, 25, true, TODAY);
+    let s = useStore.getState();
+    const afterFocus = s.gamification.points;
+    expect(afterFocus).toBeGreaterThanOrEqual(10 + 5); // focus bonus + at least 5 for 25 min
+    expect(s.blocks.find((b) => b.id === block.id)?.status).toBe("planned");
+
+    useStore.getState().toggleBlock(block.id, TODAY);
+    s = useStore.getState();
+    expect(s.deliverables.find((d) => d.id === block.deliverableId)?.loggedMinutes).toBe(block.minutes);
+  });
+
+  it("enough focus time checks the block off by itself", () => {
+    useStore.getState().loadDemo(TODAY);
+    const block = useStore.getState().blocks.find((b) => b.date === TODAY)!;
+    useStore.getState().logFocus(block.id, block.minutes, false, TODAY);
+    expect(useStore.getState().blocks.find((b) => b.id === block.id)?.status).toBe("done");
+  });
+
+  it("marking a deliverable done learns your pace, gives +50 and removes its blocks", () => {
+    useStore.getState().loadDemo(TODAY);
+    const essays = useStore.getState().deliverables.filter((x) => x.type === "essay");
+    const [d, other] = [essays[0], essays[1]];
+    useStore.getState().updateDeliverable(d.id, { loggedMinutes: Math.round(d.estimatedHours * 60 * 1.5) });
+    useStore.getState().setDeliverableDone(d.id, true, TODAY);
+
+    const s = useStore.getState();
+    expect(s.gamification.points).toBe(50);
+    expect(s.pace.byType.essay).toBeGreaterThan(1);
+    expect(s.blocks.some((b) => b.deliverableId === d.id && b.status === "planned")).toBe(false);
+    // Other essays now get more time.
+    expect(s.deliverables.find((x) => x.id === other.id)!.estimatedHours).toBeGreaterThan(other.estimatedHours);
+
+    useStore.getState().setDeliverableDone(d.id, false, TODAY);
+    expect(useStore.getState().gamification.points).toBe(0);
+  });
+
+  it("stores and clears scores", () => {
+    useStore.getState().loadDemo(TODAY);
+    const id = useStore.getState().deliverables[0].id;
+    useStore.getState().setScore(id, 7.5);
+    expect(useStore.getState().deliverables[0].score).toBe(7.5);
+    useStore.getState().setScore(id, undefined);
+    expect("score" in useStore.getState().deliverables[0]).toBe(false);
+  });
+
   it("setCourses computes estimates; a new effort level updates them", () => {
     useStore.getState().setCourses(
       [{ id: "c1", name: "Stats", color: "#000", effort: 3, gradeScale: 10 }],

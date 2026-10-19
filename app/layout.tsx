@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import { AppNav } from "@/components/AppNav";
 import "./globals.css";
 
@@ -41,7 +42,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <AppNav />
+        {/* The nav reads the URL, which on dynamic pages (/focus/…) is only known at request time. */}
+        <Suspense fallback={null}>
+          <AppNav />
+        </Suspense>
         {children}
       </body>
     </html>

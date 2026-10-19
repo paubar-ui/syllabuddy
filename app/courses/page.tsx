@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ComingSoon } from "@/components/ComingSoon";
+import { CoursesView } from "@/components/courses/CoursesView";
 
 export const metadata: Metadata = { title: "Courses" };
 
 export default function CoursesPage() {
-  return <ComingSoon title="Courses" text="Editing courses, marking work done and the grade calculator are coming soon." />;
+  return <CoursesView />;
 }

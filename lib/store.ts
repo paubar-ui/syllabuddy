@@ -4,14 +4,18 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 import { todayISO } from "./dates";
 import { createDemoSemester, DEMO_AVAILABILITY } from "./demo";
 import { estimateHours } from "./estimate";
+import type { FocusTimer } from "./focus";
 import {
   addPoints,
   blockPoints,
   completeDay,
+  DELIVERABLE_BONUS,
+  FOCUS_BONUS,
   initialGamification,
   isDayComplete,
   settleMissedDays,
 } from "./gamification";
+import { emptyPace, updatePace } from "./pace";
 import { generateSchedule } from "./scheduler";
 import type {
   Availability,
@@ -58,6 +62,10 @@ interface Data {
   gamification: Gamification;
   warnings: string[];
   isDemo: boolean;
+  /** Minutes logged with the focus timer, per study block. */
+  focusMinutes: Record<string, number>;
+  /** The focus timer, kept here so it survives a refresh. */
+  timer: FocusTimer | null;
 }
 
 interface Actions {
@@ -69,6 +77,13 @@ interface Actions {
   setAvailability: (availability: Availability) => void;
   generatePlan: (today?: string) => void;
   toggleBlock: (blockId: string, today?: string) => void;
+  /** Logs focus-timer minutes on a block; a full 25-minute session also earns the focus bonus. */
+  logFocus: (blockId: string, minutes: number, completedSession: boolean, today?: string) => void;
+  /** Marks a deliverable done (learns your pace, +50 points) or not done, then replans. */
+  setDeliverableDone: (id: string, done: boolean, today?: string) => void;
+  /** Score obtained on a deliverable, on the course's scale (undefined clears it). */
+  setScore: (id: string, score: number | undefined) => void;
+  setTimer: (timer: FocusTimer | null) => void;
   /** Run once when the app opens: checks past days for a broken streak. */
   settleDays: (today?: string) => void;
   setMascotTone: (tone: Gamification["mascotTone"]) => void;
@@ -82,23 +97,56 @@ const initialData = (): Data => ({
   deliverables: [],
   blocks: [],
   availability: DEFAULT_AVAILABILITY,
-  pace: { byType: {}, byCourse: {} },
+  pace: emptyPace(),
   gamification: initialGamification(),
   warnings: [],
   isDemo: false,
+  focusMinutes: {},
+  timer: null,
 });
 
 export const useStore = create<SyllabuddyState>()(
   persist(
     (set, get) => {
-      const estimateFor = (d: Pick<Deliverable, "type" | "weight" | "courseId">, courses: Course[]) =>
+      const estimateFor = (
+        d: Pick<Deliverable, "type" | "weight" | "courseId">,
+        courses: Course[],
+        pace: PaceProfile = get().pace,
+      ) =>
         estimateHours({
           type: d.type,
           weight: d.weight,
           effort: courses.find((c) => c.id === d.courseId)?.effort ?? 3,
           courseId: d.courseId,
-          pace: get().pace,
+          pace,
         });
+
+      /** Logs minutes and points for a block, and completes the day if this finished it. */
+      const credit = (
+        s: SyllabuddyState,
+        block: StudyBlock,
+        minutes: number,
+        bonus: number,
+        blocks: StudyBlock[],
+        today: string,
+      ): Pick<Data, "deliverables" | "gamification"> => {
+        const weight = s.deliverables.find((d) => d.id === block.deliverableId)?.weight ?? 0;
+        const sign = minutes < 0 ? -1 : 1;
+        const deliverables = s.deliverables.map((d) =>
+          d.id === block.deliverableId ? { ...d, loggedMinutes: Math.max(0, d.loggedMinutes + minutes) } : d,
+        );
+        let gamification = addPoints(
+          s.gamification,
+          today,
+          sign * blockPoints(Math.abs(minutes), weight) + bonus,
+          minutes,
+        );
+        const finishedNow = blocks.find((b) => b.id === block.id)?.status === "done";
+        if (finishedNow && block.date === today && isDayComplete(blocks.filter((b) => b.date === today))) {
+          gamification = completeDay(gamification, today);
+        }
+        return { deliverables, gamification };
+      };
 
       return {
         ...initialData(),
@@ -124,6 +172,8 @@ export const useStore = create<SyllabuddyState>()(
             blocks: [],
             warnings: [],
             isDemo: false,
+            focusMinutes: {},
+            timer: null,
             // Points earned in the demo don't carry over to a real semester.
             gamification: s.isDemo
               ? { ...initialGamification(), mascotTone: s.gamification.mascotTone }
@@ -138,7 +188,7 @@ export const useStore = create<SyllabuddyState>()(
               patch.effort === undefined
                 ? s.deliverables
                 : s.deliverables.map((d) =>
-                    d.courseId === id ? { ...d, estimatedHours: estimateFor(d, courses) } : d,
+                    d.courseId === id && !d.done ? { ...d, estimatedHours: estimateFor(d, courses) } : d,
                   );
             return { courses, deliverables };
           }),
@@ -166,31 +216,60 @@ export const useStore = create<SyllabuddyState>()(
           const s = get();
           const block = s.blocks.find((b) => b.id === blockId);
           if (!block) return;
-          const deliverable = s.deliverables.find((d) => d.id === block.deliverableId);
           const nowDone = block.status !== "done";
-          const sign = nowDone ? 1 : -1;
           const undoneStatus: StudyBlock["status"] = block.date < today ? "missed" : "planned";
-
           const blocks = s.blocks.map((b) =>
             b.id === blockId ? { ...b, status: nowDone ? ("done" as const) : undoneStatus } : b,
           );
-          const deliverables = s.deliverables.map((d) =>
-            d.id === block.deliverableId
-              ? { ...d, loggedMinutes: Math.max(0, d.loggedMinutes + sign * block.minutes) }
-              : d,
-          );
-          let gamification = addPoints(
-            s.gamification,
-            today,
-            sign * blockPoints(block.minutes, deliverable?.weight ?? 0),
-            sign * block.minutes,
-          );
-          if (nowDone && block.date === today) {
-            const todayBlocks = blocks.filter((b) => b.date === today);
-            if (isDayComplete(todayBlocks)) gamification = completeDay(gamification, today);
-          }
-          set({ blocks, deliverables, gamification });
+          // Minutes already logged with the focus timer aren't counted twice.
+          const rest = Math.max(0, block.minutes - (s.focusMinutes[blockId] ?? 0));
+          set({ blocks, ...credit(s, block, nowDone ? rest : -rest, 0, blocks, today) });
         },
+
+        logFocus: (blockId, minutes, completedSession, today = todayISO()) => {
+          const s = get();
+          const block = s.blocks.find((b) => b.id === blockId);
+          if (!block || minutes <= 0) return;
+          const focused = (s.focusMinutes[blockId] ?? 0) + minutes;
+          // Enough focus time on this block checks it off automatically.
+          const blocks =
+            block.status !== "done" && focused >= block.minutes
+              ? s.blocks.map((b) => (b.id === blockId ? { ...b, status: "done" as const } : b))
+              : s.blocks;
+          set({
+            blocks,
+            focusMinutes: { ...s.focusMinutes, [blockId]: focused },
+            ...credit(s, block, minutes, completedSession ? FOCUS_BONUS : 0, blocks, today),
+          });
+        },
+
+        setDeliverableDone: (id, done, today = todayISO()) => {
+          const s = get();
+          const deliverable = s.deliverables.find((d) => d.id === id);
+          if (!deliverable || deliverable.done === done) return;
+          const effort = s.courses.find((c) => c.id === deliverable.courseId)?.effort ?? 3;
+          const pace = done ? updatePace(s.pace, deliverable, effort) : s.pace;
+          // Your new pace changes how long the remaining work should take.
+          const deliverables = s.deliverables.map((d) => {
+            if (d.id === id) return { ...d, done };
+            return d.done || pace === s.pace ? d : { ...d, estimatedHours: estimateFor(d, s.courses, pace) };
+          });
+          const gamification = addPoints(s.gamification, today, done ? DELIVERABLE_BONUS : -DELIVERABLE_BONUS);
+          set({ deliverables, pace, gamification });
+          get().generatePlan(today);
+        },
+
+        setScore: (id, score) =>
+          set((s) => ({
+            deliverables: s.deliverables.map((d) => {
+              if (d.id !== id) return d;
+              const { score: _old, ...rest } = d;
+              void _old;
+              return score === undefined ? rest : { ...rest, score };
+            }),
+          })),
+
+        setTimer: (timer) => set({ timer }),
 
         settleDays: (today = todayISO()) =>
           set((s) => ({ gamification: settleMissedDays(s.gamification, s.blocks, today) })),
@@ -214,7 +293,20 @@ export const useStore = create<SyllabuddyState>()(
         gamification,
         warnings,
         isDemo,
-      }): Data => ({ courses, deliverables, blocks, availability, pace, gamification, warnings, isDemo }),
+        focusMinutes,
+        timer,
+      }): Data => ({
+        courses,
+        deliverables,
+        blocks,
+        availability,
+        pace,
+        gamification,
+        warnings,
+        isDemo,
+        focusMinutes,
+        timer,
+      }),
     },
   ),
 );

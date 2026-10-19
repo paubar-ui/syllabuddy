@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ComingSoon } from "@/components/ComingSoon";
+import { PlanView } from "@/components/plan/PlanView";
 
 export const metadata: Metadata = { title: "Plan" };
 
 export default function PlanPage() {
-  return <ComingSoon title="Plan" text="Your week view, semester workload heatmap and calendar export are coming soon." />;
+  return <PlanView />;
 }

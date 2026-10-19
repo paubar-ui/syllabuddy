@@ -211,8 +211,17 @@ function TodayContent() {
                     {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
                   </span>
                 </label>
-                <span className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold">
-                  {block.minutes} min
+                <span className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                  <span className="rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold">{block.minutes} min</span>
+                  {!done && (
+                    <Link
+                      href={`/focus/${block.id}`}
+                      aria-label={`Start a focus session for ${d?.title ?? "this block"}`}
+                      className="rounded-full border border-line px-3 py-1 text-sm font-semibold text-accent hover:bg-accent-soft"
+                    >
+                      ▶ Focus
+                    </Link>
+                  )}
                 </span>
               </li>
             );
