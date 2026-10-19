@@ -118,13 +118,17 @@ export const useStore = create<SyllabuddyState>()(
         },
 
         setCourses: (courses, deliverables) =>
-          set({
+          set((s) => ({
             courses,
             deliverables: deliverables.map((d) => ({ ...d, estimatedHours: estimateFor(d, courses) })),
             blocks: [],
             warnings: [],
             isDemo: false,
-          }),
+            // Points earned in the demo don't carry over to a real semester.
+            gamification: s.isDemo
+              ? { ...initialGamification(), mascotTone: s.gamification.mascotTone }
+              : s.gamification,
+          })),
 
         updateCourse: (id, patch) =>
           set((s) => {

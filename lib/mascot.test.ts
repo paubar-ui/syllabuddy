@@ -4,7 +4,7 @@ import type { StudyBlock } from "./types";
 
 const tones: MascotTone[] = ["gentle", "coach", "savage"];
 const situations: MascotSituation[] = [
-  "morningPlan", "allDone", "missedYesterday", "deadlineSoon", "streakMilestone", "burnout",
+  "morningPlan", "freeDay", "allDone", "missedYesterday", "deadlineSoon", "streakMilestone", "burnout",
 ];
 
 const blocks = (...statuses: StudyBlock["status"][]): StudyBlock[] =>
@@ -51,5 +51,6 @@ describe("pickSituation", () => {
     expect(pickSituation({ ...base, nextDeadlineDays: 2 })).toBe("deadlineSoon");
     expect(pickSituation({ ...base, nextDeadlineDays: 5 })).toBe("morningPlan");
     expect(pickSituation(base)).toBe("morningPlan");
+    expect(pickSituation({ ...base, todayBlocks: [] })).toBe("freeDay");
   });
 });

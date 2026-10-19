@@ -5,7 +5,7 @@ import { estimateHours } from "./estimate";
 import type { Availability, Course, Deliverable, DeliverableType } from "./types";
 
 export const DEMO_AVAILABILITY: Availability = {
-  minutesPerWeekday: [150, 150, 150, 150, 90, 60, 120], // Mon..Sun
+  minutesPerWeekday: [210, 210, 210, 210, 150, 120, 180], // Mon..Sun ≈ 21.5h a week
   maxMinutesPerDay: 300,
   daysOff: [],
 };
@@ -22,7 +22,7 @@ const DEMO_COURSES: (Omit<Course, "id"> & { key: string; items: DemoItem[] })[] 
     targetGrade: 8,
     attendancePolicy: "Attendance is mandatory; missing more than 30% of sessions means failing the course.",
     items: [
-      ["Problem set 1: Time value of money", "homework", 10, 2],
+      ["Problem set 1: Time value of money", "homework", 10, 3],
       ["Midterm exam", "midterm", 30, 24],
       ["Valuation case study", "project", 20, 45],
       ["Final exam", "final", 40, 68],
@@ -51,7 +51,7 @@ const DEMO_COURSES: (Omit<Course, "id"> & { key: string; items: DemoItem[] })[] 
     gradeScale: 100,
     targetGrade: 75,
     items: [
-      ["Quiz 1: Probability", "quiz", 10, 4],
+      ["Quiz 1: Probability", "quiz", 10, 2],
       ["Problem set: Regression", "homework", 10, 15],
       ["Midterm exam", "midterm", 25, 30],
       ["Quiz 2: Inference", "quiz", 10, 47],

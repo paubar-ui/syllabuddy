@@ -5,6 +5,7 @@ import type { Gamification, StudyBlock } from "./types";
 export type MascotTone = Gamification["mascotTone"];
 export type MascotSituation =
   | "morningPlan"
+  | "freeDay"
   | "allDone"
   | "missedYesterday"
   | "deadlineSoon"
@@ -18,6 +19,10 @@ export const MESSAGES: Record<MascotTone, Record<MascotSituation, string[]>> = {
       "Good morning! Today's plan is {minutes} minutes across {count} blocks — one at a time is plenty.",
       "Hi there. {count} small blocks today, {minutes} minutes in total. Go gently, you've got this.",
       "A calm {minutes} minutes today. Start with whichever block feels easiest.",
+    ],
+    freeDay: [
+      "Nothing planned for today. Rest, catch up on sleep, or get a little ahead — your choice.",
+      "A free day! Your next study block is waiting {when}. Enjoy today.",
     ],
     allDone: [
       "Everything's done for today. Be proud, and rest well.",
@@ -46,6 +51,10 @@ export const MESSAGES: Record<MascotTone, Record<MascotSituation, string[]>> = {
       "Plan's ready: {minutes} minutes of focused work. Knock out block one early.",
       "{count} blocks on the board. Pick one, set the timer, go.",
     ],
+    freeDay: [
+      "No blocks today — recovery is training too. Back at it {when}.",
+      "Rest day on the schedule. Recharge now, focus {when}.",
+    ],
     allDone: [
       "All blocks done. That's how you win a semester — one day at a time.",
       "Clean sweep today! Same again tomorrow.",
@@ -72,6 +81,10 @@ export const MESSAGES: Record<MascotTone, Record<MascotSituation, string[]>> = {
       "{minutes} minutes today. Your phone will survive without you, I promise.",
       "{count} blocks on the menu. Sadly, they won't check themselves off.",
       "{minutes} minutes. That's like two episodes. You can do two episodes of studying.",
+    ],
+    freeDay: [
+      "Nothing planned today. Don't get used to it — I'm back {when}.",
+      "A day off? Enjoy it. I'll be ticking again {when}.",
     ],
     allDone: [
       "Done already? Who are you and what did you do with the procrastinator?",
@@ -137,5 +150,5 @@ export function pickSituation(ctx: MascotContext): MascotSituation {
   }
   if (ctx.missedYesterday) return "missedYesterday";
   if (ctx.nextDeadlineDays != null && ctx.nextDeadlineDays <= 3) return "deadlineSoon";
-  return "morningPlan";
+  return ctx.todayBlocks.length === 0 ? "freeDay" : "morningPlan";
 }

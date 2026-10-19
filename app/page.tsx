@@ -1,69 +1,67 @@
-import Image from "next/image";
+import Link from "next/link";
+import { DemoButton } from "@/components/DemoButton";
+import { Tick } from "@/components/Tick";
+
+const BENEFITS = [
+  {
+    title: "Every deadline in one place",
+    text: "Paste or upload your syllabi. Syllabuddy finds the dates and grade weights for you to check.",
+  },
+  {
+    title: "A daily plan that fits your life",
+    text: "Tell us how hard each class feels and when you're free. We spread the work so there are no hell weeks.",
+  },
+  {
+    title: "Stay on track, together",
+    text: "Check off study blocks, keep your streak, earn points — with Tick cheering you on, and friends to compete with.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main id="main" className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-10 sm:py-16">
+      <section className="flex flex-col items-center text-center">
+        <Tick size={112} />
+        <p className="mt-4 text-sm font-semibold uppercase tracking-wider text-accent">Syllabuddy</p>
+        <h1 className="mt-2 text-3xl font-bold leading-tight sm:text-5xl">
+          Your syllabi, turned into a daily study plan.
+        </h1>
+        <p className="mt-4 max-w-xl text-lg text-muted">
+          Upload your syllabi, tell us how hard each class is for you, and get a daily study plan that
+          keeps you on track — with streaks, a mascot coach and friends to compete with.
+        </p>
+        <div className="mt-8 flex w-full flex-col items-center justify-center gap-3 sm:flex-row">
+          <DemoButton className="w-full sm:w-auto" />
+          <Link
+            href="/onboarding"
+            data-testid="start-button"
+            className="w-full rounded-full border-2 border-accent px-6 py-2.5 text-center text-base font-semibold text-accent transition hover:bg-accent-soft sm:w-auto"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Start with my syllabi
+          </Link>
         </div>
-      </main>
-    </div>
+        <p className="mt-3 text-sm text-muted">No account needed. Your plan stays in this browser.</p>
+      </section>
+
+      <section aria-labelledby="benefits" className="mt-14">
+        <h2 id="benefits" className="sr-only">
+          Why Syllabuddy
+        </h2>
+        <ul className="grid gap-4 sm:grid-cols-3">
+          {BENEFITS.map((b, i) => (
+            <li key={b.title} className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+              <span
+                aria-hidden="true"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft font-bold text-accent"
+              >
+                {i + 1}
+              </span>
+              <h3 className="mt-3 font-semibold">{b.title}</h3>
+              <p className="mt-1 text-sm text-muted">{b.text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
   );
 }

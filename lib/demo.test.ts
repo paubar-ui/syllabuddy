@@ -27,12 +27,13 @@ describe("demo semester", () => {
     }
   });
 
-  it("gives a non-empty Today, whatever weekday you open it", () => {
+  it("gives a Today with 2+ blocks and no warnings, whatever weekday you open it", () => {
     for (let i = 0; i < 7; i++) {
       const today = addDaysISO(TODAY, i);
       const demo = createDemoSemester(today);
-      const { blocks } = generateSchedule({ ...demo, availability: DEMO_AVAILABILITY, today });
-      expect(blocks.some((b) => b.date === today)).toBe(true);
+      const { blocks, warnings } = generateSchedule({ ...demo, availability: DEMO_AVAILABILITY, today });
+      expect(blocks.filter((b) => b.date === today).length).toBeGreaterThanOrEqual(2);
+      expect(warnings).toEqual([]);
     }
   });
 });
