@@ -9,6 +9,7 @@ import { buttonLink, buttonPrimary, buttonSecondary, card } from "@/components/u
 import { detectBurnout } from "@/lib/burnout";
 import { addDaysISO, daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
 import { blockPoints } from "@/lib/gamification";
+import { weeklyStats } from "@/lib/leaderboard";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
 import { formatHours } from "@/lib/scheduler";
 import { useStore } from "@/lib/store";
@@ -52,6 +53,11 @@ function TodayContent() {
   useEffect(() => {
     settleDays(today);
     replanIfNeeded(today);
+    // Study Buddies: quietly share this week's points/streak/hours if you're logged in.
+    // Loaded on demand, so the Supabase code isn't downloaded by people who never use it.
+    import("@/lib/buddies").then(({ buddiesConfigured, syncIfSignedIn }) => {
+      if (buddiesConfigured) syncIfSignedIn(weeklyStats(useStore.getState().gamification, today));
+    });
   }, [settleDays, replanIfNeeded, today]);
 
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
