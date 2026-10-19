@@ -63,6 +63,7 @@ export interface Gamification {
   bestStreak: number;
   streakFreezes: number;
   lastCompletedDate?: string;
+  lastCheckedDate?: string; // last past day already checked for a missed streak
   mascotTone: "gentle" | "coach" | "savage";
   history: { date: string; minutes: number; points: number }[];
 }
