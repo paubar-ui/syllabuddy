@@ -48,6 +48,7 @@ describe("pickSituation", () => {
 
   it("then missed yesterday, then deadlines, then the normal morning plan", () => {
     expect(pickSituation({ ...base, missedYesterday: true, nextDeadlineDays: 1 })).toBe("missedYesterday");
+    expect(pickSituation({ ...base, replanned: true })).toBe("missedYesterday");
     expect(pickSituation({ ...base, nextDeadlineDays: 2 })).toBe("deadlineSoon");
     expect(pickSituation({ ...base, nextDeadlineDays: 5 })).toBe("morningPlan");
     expect(pickSituation(base)).toBe("morningPlan");

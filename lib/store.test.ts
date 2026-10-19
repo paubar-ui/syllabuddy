@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { remainingMinutes } from "./scheduler";
 import { useStore } from "./store";
 
 const TODAY = "2026-10-19";
@@ -88,6 +89,41 @@ describe("store", () => {
     expect(useStore.getState().deliverables[0].score).toBe(7.5);
     useStore.getState().setScore(id, undefined);
     expect("score" in useStore.getState().deliverables[0]).toBe(false);
+  });
+
+  it("replans missed blocks from past days, once", () => {
+    useStore.getState().loadDemo("2026-10-17");
+    const pastPlanned = useStore.getState().blocks.filter((b) => b.date < TODAY && b.status === "planned");
+    expect(pastPlanned.length).toBeGreaterThan(0);
+
+    useStore.getState().replanIfNeeded(TODAY);
+    const s = useStore.getState();
+    expect(s.blocks.filter((b) => b.date < TODAY && b.status === "planned")).toEqual([]);
+    expect(s.blocks.filter((b) => b.status === "missed")).toHaveLength(pastPlanned.length);
+    expect(s.lastReplan).toEqual({
+      date: TODAY,
+      blocks: pastPlanned.length,
+      minutes: pastPlanned.reduce((sum, b) => sum + b.minutes, 0),
+    });
+    // The missed time is back in the plan: work due after today is fully planned again from today.
+    for (const d of s.deliverables.filter((x) => !x.done && x.dueDate > TODAY)) {
+      const planned = s.blocks
+        .filter((b) => b.deliverableId === d.id && b.status === "planned")
+        .reduce((sum, b) => sum + b.minutes, 0);
+      expect(planned).toBe(remainingMinutes(d));
+    }
+
+    const before = useStore.getState().lastReplan;
+    useStore.getState().replanIfNeeded(TODAY);
+    expect(useStore.getState().lastReplan).toBe(before);
+  });
+
+  it("protect tonight makes today a day off and clears today's plan", () => {
+    useStore.getState().loadDemo(TODAY);
+    useStore.getState().protectTonight(TODAY);
+    const s = useStore.getState();
+    expect(s.availability.daysOff).toContain(TODAY);
+    expect(s.blocks.filter((b) => b.date === TODAY && b.status === "planned")).toEqual([]);
   });
 
   it("setCourses computes estimates; a new effort level updates them", () => {

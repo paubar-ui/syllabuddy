@@ -1,6 +1,7 @@
 // The app's memory: one Zustand store, saved to localStorage so data survives a refresh.
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import type { BackupData } from "./backup";
 import { todayISO } from "./dates";
 import { createDemoSemester, DEMO_AVAILABILITY } from "./demo";
 import { estimateHours } from "./estimate";
@@ -66,6 +67,8 @@ interface Data {
   focusMinutes: Record<string, number>;
   /** The focus timer, kept here so it survives a refresh. */
   timer: FocusTimer | null;
+  /** The last time missed blocks were moved back into the plan (shown on Today). */
+  lastReplan: { date: string; blocks: number; minutes: number } | null;
 }
 
 interface Actions {
@@ -84,6 +87,12 @@ interface Actions {
   /** Score obtained on a deliverable, on the course's scale (undefined clears it). */
   setScore: (id: string, score: number | undefined) => void;
   setTimer: (timer: FocusTimer | null) => void;
+  /** Past blocks that were never done become "missed"; their time is planned again from today. */
+  replanIfNeeded: (today?: string) => void;
+  /** Burnout guard: makes today a day off and moves today's work elsewhere. */
+  protectTonight: (today?: string) => void;
+  /** Replaces everything with an imported backup. */
+  importData: (data: BackupData) => void;
   /** Run once when the app opens: checks past days for a broken streak. */
   settleDays: (today?: string) => void;
   setMascotTone: (tone: Gamification["mascotTone"]) => void;
@@ -103,6 +112,7 @@ const initialData = (): Data => ({
   isDemo: false,
   focusMinutes: {},
   timer: null,
+  lastReplan: null,
 });
 
 export const useStore = create<SyllabuddyState>()(
@@ -271,6 +281,36 @@ export const useStore = create<SyllabuddyState>()(
 
         setTimer: (timer) => set({ timer }),
 
+        replanIfNeeded: (today = todayISO()) => {
+          const overdue = get().blocks.filter((b) => b.status === "planned" && b.date < today);
+          if (overdue.length === 0) return;
+          get().generatePlan(today); // the scheduler marks them missed and replans from today
+          set({
+            lastReplan: {
+              date: today,
+              blocks: overdue.length,
+              minutes: overdue.reduce((sum, b) => sum + b.minutes, 0),
+            },
+          });
+        },
+
+        protectTonight: (today = todayISO()) => {
+          const { availability } = get();
+          if (!availability.daysOff.includes(today)) {
+            set({ availability: { ...availability, daysOff: [...availability.daysOff, today].sort() } });
+          }
+          get().generatePlan(today);
+        },
+
+        importData: (data) =>
+          set({
+            ...initialData(),
+            ...data,
+            // A running timer or old replan notice doesn't make sense after an import.
+            timer: null,
+            lastReplan: null,
+          }),
+
         settleDays: (today = todayISO()) =>
           set((s) => ({ gamification: settleMissedDays(s.gamification, s.blocks, today) })),
 
@@ -295,6 +335,7 @@ export const useStore = create<SyllabuddyState>()(
         isDemo,
         focusMinutes,
         timer,
+        lastReplan,
       }): Data => ({
         courses,
         deliverables,
@@ -306,6 +347,7 @@ export const useStore = create<SyllabuddyState>()(
         isDemo,
         focusMinutes,
         timer,
+        lastReplan,
       }),
     },
   ),

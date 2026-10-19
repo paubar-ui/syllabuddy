@@ -56,8 +56,17 @@ export function AppNav() {
             <Tick size={32} />
             Syllabuddy
           </Link>
-          <nav aria-label="Main">
+          <nav aria-label="Main" className="flex items-center gap-1">
             <ul className="flex gap-1">{links}</ul>
+            <Link
+              href="/settings"
+              aria-current={pathname === "/settings" ? "page" : undefined}
+              className={`rounded-xl px-3 py-2 text-sm font-medium ${
+                pathname === "/settings" ? "bg-accent-soft text-ink" : "text-muted hover:text-ink"
+              }`}
+            >
+              <span aria-hidden="true">⚙ </span>Settings
+            </Link>
           </nav>
         </div>
       </header>

@@ -25,8 +25,10 @@ import {
 import { parseSyllabus } from "@/lib/parseSyllabus";
 import { extractPdfText } from "@/lib/pdf";
 import { useStore } from "@/lib/store";
-import type { Availability, Effort } from "@/lib/types";
+import type { Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
+import { availabilityFromForm, formFromAvailability } from "@/lib/availability";
+import { AvailabilityFields } from "../AvailabilityFields";
 import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "../ui";
 
 type Step = 1 | 2 | 3 | 4;
@@ -683,13 +685,6 @@ function StepEffort({
 // Step 4 — weekly availability, then generate the plan
 // ---------------------------------------------------------------------------
 
-const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const toHours = (minutes: number) => String(Math.round((minutes / 60) * 2) / 2);
-const toMinutes = (hours: string) => {
-  const n = Number(hours.replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? Math.round(Math.min(n, 16) * 60) : 0;
-};
-
 function StepAvailability({
   headingRef,
   drafts,
@@ -701,14 +696,13 @@ function StepAvailability({
 }) {
   const router = useRouter();
   const saved = useStore((s) => s.availability);
-  const [hours, setHours] = useState(() => saved.minutesPerWeekday.map(toHours));
-  const [maxHours, setMaxHours] = useState(() => toHours(saved.maxMinutesPerDay));
+  const [form, setForm] = useState(() => formFromAvailability(saved));
   const [error, setError] = useState<string | null>(null);
 
   function generate() {
-    const minutesPerWeekday = hours.map(toMinutes) as Availability["minutesPerWeekday"];
-    if (minutesPerWeekday.every((m) => m === 0)) {
-      setError("Add some study time on at least one day.");
+    const parsed = availabilityFromForm(form, []);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
     const problems = validateDrafts(drafts);
@@ -719,11 +713,7 @@ function StepAvailability({
     const store = useStore.getState();
     const { courses, deliverables } = draftsToStore(drafts);
     store.setCourses(courses, deliverables);
-    store.setAvailability({
-      minutesPerWeekday,
-      maxMinutesPerDay: toMinutes(maxHours) || 300,
-      daysOff: [],
-    });
+    store.setAvailability(parsed.availability);
     store.generatePlan();
     router.push("/today");
   }
@@ -738,46 +728,7 @@ function StepAvailability({
         </p>
       )}
       <div className={`${card} mt-6`}>
-        <fieldset>
-          <legend className="font-semibold">Hours per day</legend>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {WEEKDAYS.map((day, i) => (
-              <div key={day}>
-                <label htmlFor={`hours-${i}`} className={label}>
-                  {day}
-                </label>
-                <input
-                  id={`hours-${i}`}
-                  type="number"
-                  min={0}
-                  max={16}
-                  step={0.5}
-                  inputMode="decimal"
-                  className={input}
-                  value={hours[i]}
-                  onChange={(e) => setHours((h) => h.map((v, j) => (j === i ? e.target.value : v)))}
-                />
-              </div>
-            ))}
-          </div>
-        </fieldset>
-        <div className="mt-5 max-w-xs">
-          <label htmlFor="max-hours" className={label}>
-            Never plan more than (hours a day)
-          </label>
-          <input
-            id="max-hours"
-            type="number"
-            min={0.5}
-            max={16}
-            step={0.5}
-            inputMode="decimal"
-            className={input}
-            value={maxHours}
-            onChange={(e) => setMaxHours(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-muted">A hard limit that protects you from burnout.</p>
-        </div>
+        <AvailabilityFields value={form} onChange={setForm} />
       </div>
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
         <button type="button" onClick={onBack} className={buttonSecondary}>

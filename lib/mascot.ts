@@ -134,6 +134,8 @@ export function getMascotMessage(
 export interface MascotContext {
   todayBlocks: StudyBlock[];
   missedYesterday: boolean;
+  /** Missed blocks were just moved back into the plan. */
+  replanned?: boolean;
   /** Days until the nearest open deadline, if one is within 72h. */
   nextDeadlineDays?: number | null;
   streak: number;
@@ -148,7 +150,7 @@ export function pickSituation(ctx: MascotContext): MascotSituation {
   if (allDone) {
     return ctx.streak > 0 && ctx.streak % 7 === 0 ? "streakMilestone" : "allDone";
   }
-  if (ctx.missedYesterday) return "missedYesterday";
+  if (ctx.missedYesterday || ctx.replanned) return "missedYesterday";
   if (ctx.nextDeadlineDays != null && ctx.nextDeadlineDays <= 3) return "deadlineSoon";
   return ctx.todayBlocks.length === 0 ? "freeDay" : "morningPlan";
 }

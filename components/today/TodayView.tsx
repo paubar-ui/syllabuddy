@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoButton } from "@/components/DemoButton";
 import { MascotBubble, Tick } from "@/components/Tick";
-import { buttonLink, buttonSecondary, card } from "@/components/ui";
+import { buttonLink, buttonPrimary, buttonSecondary, card } from "@/components/ui";
+import { detectBurnout } from "@/lib/burnout";
 import { addDaysISO, daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
 import { blockPoints } from "@/lib/gamification";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
+import { formatHours } from "@/lib/scheduler";
 import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/useHydrated";
 
@@ -36,12 +38,21 @@ function TodayContent() {
   const isDemo = useStore((s) => s.isDemo);
   const toggleBlock = useStore((s) => s.toggleBlock);
   const settleDays = useStore((s) => s.settleDays);
+  const replanIfNeeded = useStore((s) => s.replanIfNeeded);
+  const protectTonight = useStore((s) => s.protectTonight);
+  const lastReplan = useStore((s) => s.lastReplan);
+  const availability = useStore((s) => s.availability);
   const [announcement, setAnnouncement] = useState("");
+  const [replanSeen, setReplanSeen] = useState(false);
 
   // "Today" is read once per visit, so the page doesn't change under you at midnight.
   const [today] = useState(todayISO);
 
-  useEffect(() => settleDays(today), [settleDays, today]);
+  // Once per visit: check the streak, then move any missed blocks back into the plan.
+  useEffect(() => {
+    settleDays(today);
+    replanIfNeeded(today);
+  }, [settleDays, replanIfNeeded, today]);
 
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const deliverableById = useMemo(() => new Map(deliverables.map((d) => [d.id, d])), [deliverables]);
@@ -76,13 +87,21 @@ function TodayContent() {
     );
   }
 
+  const burnout = detectBurnout({ history: gamification.history, availability, today });
+  const replannedToday = lastReplan?.date === today && lastReplan.blocks > 0;
+  const protectedTonight = availability.daysOff.includes(today);
   const next = upcoming[0];
   const nextBlockDays = nextBlock ? daysBetween(today, nextBlock.date) : null;
-  const situation = pickSituation({
+  // On a protected evening Tick only talks about resting.
+  const situation = protectedTonight
+    ? "freeDay"
+    : pickSituation({
     todayBlocks,
     missedYesterday,
     nextDeadlineDays: next?.days ?? null,
     streak: gamification.streak,
+    replanned: replannedToday,
+    burnout: burnout.triggered,
   });
   const message = getMascotMessage(
     gamification.mascotTone,
@@ -120,14 +139,22 @@ function TodayContent() {
           <h1 className="text-2xl font-bold sm:text-3xl">Today</h1>
           <p className="text-muted">{format(parseISO(today), "EEEE d MMMM")}</p>
         </div>
-        {isDemo && (
-          <p className="rounded-full bg-accent-soft px-3 py-1 text-sm">
-            Demo semester ·{" "}
-            <Link href="/onboarding" className={buttonLink}>
-              use my own syllabi
-            </Link>
-          </p>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {isDemo && (
+            <p className="rounded-full bg-accent-soft px-3 py-1 text-sm">
+              Demo semester ·{" "}
+              <Link href="/onboarding" className={buttonLink}>
+                use my own syllabi
+              </Link>
+            </p>
+          )}
+          <Link
+            href="/settings"
+            className="rounded-full border border-line px-3 py-1 text-sm font-medium hover:bg-accent-soft md:hidden"
+          >
+            <span aria-hidden="true">⚙ </span>Settings
+          </Link>
+        </div>
       </div>
 
       <dl className="mt-5 grid grid-cols-3 gap-3">
@@ -139,6 +166,61 @@ function TodayContent() {
       <div className="mt-6">
         <MascotBubble message={message} />
       </div>
+
+      {burnout.triggered && (
+        <section aria-labelledby="burnout-title" className="mt-4 rounded-2xl border border-line bg-success-soft p-4">
+          <h2 id="burnout-title" className="font-semibold">
+            Time for a breather?
+          </h2>
+          <p className="mt-1 text-sm">
+            {burnout.reason === "overwork"
+              ? `You've studied more than your daily limit for ${burnout.days} days in a row.`
+              : `You've studied ${burnout.days} days in a row without a day off.`}{" "}
+            Resting tonight helps you remember more tomorrow. Your plan will make room for it.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              protectTonight(today);
+              setAnnouncement("Tonight is protected. Today's study blocks were moved to other days.");
+            }}
+            className={`${buttonPrimary} mt-3`}
+          >
+            Protect tonight
+          </button>
+        </section>
+      )}
+      {protectedTonight && (
+        <p role="status" className="mt-4 rounded-2xl bg-success-soft px-4 py-3 text-sm">
+          🌙 Tonight is protected — no study planned. Enjoy your evening.
+        </p>
+      )}
+
+      {replannedToday && !replanSeen && lastReplan && (
+        <div role="status" className="mt-4 flex items-start justify-between gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-sm">
+          <p>
+            {lastReplan.blocks} study block{lastReplan.blocks === 1 ? "" : "s"} from earlier days didn&apos;t happen —
+            that&apos;s okay. I moved the {formatHours(lastReplan.minutes)} back into your plan, starting today.
+          </p>
+          <button type="button" onClick={() => setReplanSeen(true)} className={`${buttonLink} shrink-0`}>
+            Got it
+          </button>
+        </div>
+      )}
+
+      <Link
+        href="/panic"
+        data-testid="panic-button"
+        className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3 shadow-sm hover:bg-accent-soft"
+      >
+        <span>
+          <span className="block font-semibold">Panic mode</span>
+          <span className="block text-sm text-muted">Too much due at once? Get a calm triage of what to do first.</span>
+        </span>
+        <span aria-hidden="true" className="text-xl">
+          🆘
+        </span>
+      </Link>
 
       <section aria-labelledby="today-blocks" className="mt-8">
         <div className="flex items-baseline justify-between gap-2">
