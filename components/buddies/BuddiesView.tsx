@@ -44,7 +44,6 @@ function BuddiesContent() {
   return (
     <main id="main" className={page}>
       <PageHeader
-        back={{ href: "/settings", label: "Settings" }}
         title="Study buddies"
         description="Compete with friends on a weekly leaderboard of points, streaks and study hours. They never see your deadlines, courses or grades."
       />

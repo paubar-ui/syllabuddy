@@ -2,7 +2,8 @@
 // Numbers are kept as strings while the user types; they are converted when saving.
 import type { ExtractedSyllabus } from "./extraction";
 import { newId } from "./id";
-import type { Course, Deliverable, DeliverableType, Effort } from "./types";
+import type { ParsedSchedule } from "./parseSessions";
+import type { Course, CourseSession, Deliverable, DeliverableType, Effort, ExamDetails } from "./types";
 
 export const COURSE_COLORS = ["#1d4ed8", "#be185d", "#047857", "#b45309", "#7c3aed", "#0e7490", "#b91c1c"];
 
@@ -12,6 +13,7 @@ export interface DraftItem {
   type: DeliverableType;
   dueDate: string; // "" when missing
   weight: string;
+  exam?: ExamDetails; // details found in the syllabus for a midterm / final
 }
 
 export interface DraftCourse {
@@ -23,6 +25,7 @@ export interface DraftCourse {
   effort: Effort;
   targetGrade: string;
   items: DraftItem[];
+  sessions: CourseSession[];
 }
 
 export function emptyItem(makeId = newId): DraftItem {
@@ -39,10 +42,24 @@ export function emptyCourse(index: number, makeId = newId): DraftCourse {
     effort: 3,
     targetGrade: "",
     items: [emptyItem(makeId)],
+    sessions: [],
   };
 }
 
-export function draftFromExtraction(x: ExtractedSyllabus, index: number, makeId = newId): DraftCourse {
+export function draftFromExtraction(
+  x: ExtractedSyllabus,
+  index: number,
+  makeId = newId,
+  schedule?: ParsedSchedule,
+): DraftCourse {
+  const examFor = (type: DeliverableType): ExamDetails | undefined => {
+    if (!schedule || !["exam", "midterm", "final"].includes(type)) return undefined;
+    const found = schedule.exams.find((e) => e.type === type) ?? schedule.exams.find((e) => e.type === "exam");
+    if (!found) return undefined;
+    const { type: _type, ...details } = found;
+    void _type;
+    return details;
+  };
   const gradeScale = x.gradeScale && [10, 20, 100].includes(x.gradeScale) ? x.gradeScale : 10;
   return {
     ...emptyCourse(index, makeId),
@@ -56,8 +73,10 @@ export function draftFromExtraction(x: ExtractedSyllabus, index: number, makeId 
           type: d.type,
           dueDate: d.dueDate ?? "",
           weight: d.weight === null ? "" : String(d.weight),
+          ...(examFor(d.type) ? { exam: examFor(d.type) } : {}),
         }))
       : [emptyItem(makeId)],
+    sessions: schedule?.sessions ?? [],
   };
 }
 
@@ -125,6 +144,7 @@ export function draftsToStore(drafts: DraftCourse[]): {
       gradeScale: d.gradeScale,
       ...(target !== null ? { targetGrade: target } : {}),
       ...(d.attendancePolicy ? { attendancePolicy: d.attendancePolicy } : {}),
+      ...(d.sessions.length ? { sessions: d.sessions } : {}),
     };
   });
   const deliverables = drafts.flatMap((d) =>
@@ -137,6 +157,7 @@ export function draftsToStore(drafts: DraftCourse[]): {
       weight: toNumber(i.weight) ?? 0,
       loggedMinutes: 0,
       done: false,
+      ...(i.exam ? { exam: i.exam } : {}),
     })),
   );
   return { courses, deliverables };

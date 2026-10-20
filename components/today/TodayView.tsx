@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoButton } from "@/components/DemoButton";
 import { Callout, CourseDot, HowItWorks, PageHeader } from "@/components/kit";
+import { SessionDetail } from "@/components/SessionDetail";
 import { MascotBubble } from "@/components/Tick";
 import { AddDeadline, DeadlineList } from "@/components/today/Deadlines";
 import { buttonPrimary, buttonSecondary, card, page } from "@/components/ui";
@@ -23,8 +24,11 @@ import {
 import { daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
 import { blockPoints } from "@/lib/gamification";
 import { weeklyStats } from "@/lib/leaderboard";
+import { isExam } from "@/lib/examPlan";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
+import { blockDetail } from "@/lib/sessionDetail";
 import { useStore } from "@/lib/store";
+import type { Deliverable, StudyBlock } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
 
 export function TodayView() {
@@ -57,6 +61,7 @@ function TodayContent() {
   const [replanDismissed, setReplanDismissed] = useState(false);
   const displayName = useStore((s) => s.displayName);
   const [hour] = useState(() => new Date().getHours());
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   // "Today" is read once per visit, so the page doesn't change under you at midnight.
   const [today] = useState(todayISO);
@@ -140,7 +145,11 @@ function TodayContent() {
   const getAhead = getAheadSuggestion(blocks, today);
   const getAheadDeliverable = getAhead ? deliverableById.get(getAhead.deliverableId) : undefined;
 
-  const burnout = detectBurnout({ history: gamification.history, availability, today });
+  const burnout = detectBurnout({
+    history: gamification.history,
+    availability,
+    today,
+  });
   const replannedToday = lastReplan?.date === today && lastReplan.blocks > 0;
   const protectedTonight = availability.daysOff.includes(today);
   const alerts = headsUp({
@@ -184,6 +193,19 @@ function TodayContent() {
     },
     today,
   );
+
+  // Exam blocks show which day of the prep plan they are, e.g. "Day 3 · Probability".
+  function examHeading(block: StudyBlock, d: Deliverable) {
+    if (!isExam(d)) return null;
+    const detail = blockDetail({
+      block,
+      deliverable: d,
+      course: courses.find((c) => c.id === d.courseId),
+      blocks,
+      today,
+    });
+    return detail.examDay ? <span className="block text-xs font-semibold text-accent">{detail.heading}</span> : null;
+  }
 
   function onToggle(blockId: string) {
     const block = blocks.find((b) => b.id === blockId);
@@ -304,7 +326,10 @@ function TodayContent() {
               aria-valuemax={totalMinutes}
               aria-valuenow={doneMinutes}
             >
-              <div className="h-full rounded-full bg-accent" style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }} />
+              <div
+                className="h-full rounded-full bg-accent"
+                style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }}
+              />
             </div>
           )}
           <ul data-testid="today-list" aria-labelledby="today-blocks" className="mt-2 divide-y divide-line">
@@ -339,14 +364,26 @@ function TodayContent() {
                     onChange={() => onToggle(block.id)}
                     className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
                   />
-                  <label htmlFor={inputId} className="min-w-0 flex-1 cursor-pointer">
-                    <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>{title}</span>
+                  <label htmlFor={inputId} className="sr-only">
+                    Mark {title} as done
+                  </label>
+                  <button
+                    type="button"
+                    data-testid={`block-open-${block.id}`}
+                    onClick={() => setDetailId(block.id)}
+                    aria-haspopup="dialog"
+                    className="min-w-0 flex-1 rounded-md text-left hover:bg-surface-2 focus-visible:bg-surface-2"
+                  >
+                    <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>
+                      {d && examHeading(block, d)}
+                      {title}
+                    </span>
                     <span className="flex items-center gap-1.5 text-sm text-muted">
                       <CourseDot color={color} />
                       {courseName}
                       {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
                     </span>
-                  </label>
+                  </button>
                   <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
                     <span className="rounded-md bg-surface-2 px-2 py-0.5 text-sm font-medium tabular-nums">
                       {block.minutes} min
@@ -390,7 +427,16 @@ function TodayContent() {
                   <span className="w-14 shrink-0 tabular-nums text-muted">{format(parseISO(d.dueDate), "EEE d")}</span>
                   <CourseDot color={color} />
                   <span className="min-w-0 flex-1 truncate">
-                    <span className="font-medium">{d.title}</span>
+                    {isExam(d) ? (
+                      <Link
+                        href={`/exam/${d.id}`}
+                        className="font-medium underline underline-offset-2 hover:no-underline"
+                      >
+                        {d.title}
+                      </Link>
+                    ) : (
+                      <span className="font-medium">{d.title}</span>
+                    )}
                     <span className="text-muted"> · {courseName}</span>
                   </span>
                   <span className="shrink-0 text-muted">{d.weight}%</span>
@@ -433,22 +479,23 @@ function TodayContent() {
       <div className="mt-4">
         <HowItWorks title="How your plan is made">
           <p>
-            Every deadline gets an estimate in hours, based on its type, its weight in your grade and how hard the course
-            is for you.
+            Every deadline gets an estimate in hours, based on its type, its weight in your grade and how hard the
+            course is for you.
           </p>
           <p>
-            That time is spread over the days before the deadline — a little more each day as it gets closer, never all on
-            the last night — and fitted around the free time you set in Settings. Times on the plan are suggestions,
+            That time is spread over the days before the deadline — a little more each day as it gets closer, never all
+            on the last night — and fitted around the free time you set in Settings. Times on the plan are suggestions,
             starting at 18:00; study whenever suits you.
           </p>
           <p>
-            Missed a block? It&apos;s moved forward automatically. Mark work as done on Courses and Syllabuddy learns how
-            long things really take you.
+            Missed a block? It&apos;s moved forward automatically. Mark work as done on Courses and Syllabuddy learns
+            how long things really take you.
           </p>
         </HowItWorks>
       </div>
 
       <DeadlineList today={today} />
+      <SessionDetail blockId={detailId} today={today} onClose={() => setDetailId(null)} />
     </main>
   );
 }

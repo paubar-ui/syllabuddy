@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIcs, escapeText, foldLine } from "./ics";
+import { buildExamPlanIcs, buildIcs, escapeText, foldLine } from "./ics";
 import type { Course, Deliverable, StudyBlock } from "./types";
 
 const courses: Course[] = [{ id: "c1", name: "Finance, Corporate", color: "#000", effort: 3, gradeScale: 10 }];
@@ -61,5 +61,25 @@ describe("text helpers", () => {
     for (const part of folded.split("\r\n")) expect(encoder.encode(part).length).toBeLessThanOrEqual(75);
     expect(folded.replace(/\r\n /g, "")).toBe(line);
     expect(foldLine("SHORT:line")).toBe("SHORT:line");
+  });
+});
+
+describe("buildExamPlanIcs", () => {
+  it("makes one all-day event per plan day with the tasks in the description", () => {
+    const text = buildExamPlanIcs({
+      examTitle: "Statistics midterm",
+      courseName: "Statistics",
+      days: [
+        { date: "2026-10-20", dayNumber: 1, title: "Setup & diagnostic", goal: "Get ready.", tasks: ["Gather notes", "Rate confidence"] },
+        { date: "2026-10-21", dayNumber: 2, title: "Probability", goal: "Understand it.", tasks: ["Redo PS2"] },
+      ],
+      now: new Date(Date.UTC(2026, 9, 20, 9, 0, 0)),
+    });
+    const events = text.split("BEGIN:VEVENT").slice(1);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toContain("DTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261021");
+    expect(events[0]).toContain("UID:exam-prep-statistics-midterm-2026-10-20@syllabuddy");
+    expect(text.replace(/\r\n /g, "")).toContain("DESCRIPTION:Get ready.\\n\\n- Gather notes\\n- Rate confidence");
+    expect(text.replace(/\r\n/g, "")).not.toMatch(/[\r\n]/);
   });
 });

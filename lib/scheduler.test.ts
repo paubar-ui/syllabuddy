@@ -22,7 +22,7 @@ function deliverable(hours: number, dueIn: number, extra: Partial<Deliverable> =
     id: `d${n}`,
     courseId: "c1",
     title: `Task ${n}`,
-    type: "exam",
+    type: "homework",
     dueDate: day(dueIn),
     weight: 20,
     estimatedHours: hours,
@@ -75,7 +75,7 @@ describe("generateSchedule", () => {
   });
 
   it("is back-loaded: later days get more, but work starts ceil(hours/2) days early", () => {
-    const d = deliverable(12, 10);
+    const d = deliverable(12, 10, { type: "essay" });
     const { blocks } = generateSchedule({
       courses: [course], deliverables: [d], availability: every(300), today: TODAY,
     });
@@ -85,6 +85,38 @@ describe("generateSchedule", () => {
     expect(Math.min(...[...byDate.keys()].map((k) => k.localeCompare(day(4))))).toBeGreaterThanOrEqual(0); // starts 6 days before
     const amounts = [...byDate.entries()].sort().map(([, m]) => m);
     for (let i = 1; i < amounts.length; i++) expect(amounts[i]).toBeGreaterThanOrEqual(amounts[i - 1]);
+  });
+
+  it("starts preparing straight away for an exam 14 days away or less, with a gentle ramp", () => {
+    const exam = deliverable(12, 10, { type: "midterm" });
+    const { blocks } = generateSchedule({ courses: [course], deliverables: [exam], availability: every(300), today: TODAY });
+    const byDate = minutesByDate(blocks);
+    expect(total(blocks)).toBe(720);
+    expect(byDate.has(day(0))).toBe(true); // starts today
+    const amounts = [...byDate.entries()].sort().map(([, m]) => m);
+    expect(Math.max(...amounts) / Math.min(...amounts)).toBeLessThanOrEqual(3); // no last-minute pile-up
+    // Further away than 14 days: the normal late start.
+    const later = generateSchedule({
+      courses: [course],
+      deliverables: [deliverable(12, 20, { type: "midterm" })],
+      availability: every(300),
+      today: TODAY,
+    });
+    expect(minutesByDate(later.blocks).has(day(0))).toBe(false);
+  });
+
+  it("keeps a block you moved by hand on its new day, and plans the rest around it", () => {
+    const d = deliverable(3, 6, { type: "essay" });
+    const moved: StudyBlock = { id: "moved", deliverableId: d.id, date: day(1), minutes: 60, status: "planned", pinned: true };
+    const { blocks } = generateSchedule({
+      courses: [course],
+      deliverables: [d],
+      availability: every(300),
+      today: TODAY,
+      existingBlocks: [moved],
+    });
+    expect(blocks.find((b) => b.id === "moved")).toMatchObject({ date: day(1), status: "planned", pinned: true });
+    expect(total(blocks)).toBe(180); // 3h in total: 1h pinned + 2h planned around it
   });
 
   it("makes every block 25–90 minutes, in 5-minute steps", () => {

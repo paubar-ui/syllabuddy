@@ -13,6 +13,8 @@ const data: BackupData = {
   isDemo: true,
   focusMinutes: { b1: 25 },
   displayName: "Paula",
+  taskChecks: {},
+  blockNotes: {},
 };
 
 describe("backup", () => {

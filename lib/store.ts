@@ -24,7 +24,9 @@ import { generateSchedule } from "./scheduler";
 import type {
   Availability,
   Course,
+  CourseSession,
   Deliverable,
+  ExamDetails,
   Gamification,
   PaceProfile,
   StudyBlock,
@@ -49,6 +51,10 @@ export interface Data {
   lastReplan: { date: string; blocks: number; minutes: number } | null;
   /** Optional first name for the briefing's greeting. */
   displayName: string;
+  /** Session-detail checklists: the tasks ticked off, per study block. */
+  taskChecks: Record<string, string[]>;
+  /** Session-detail notes, per study block. */
+  blockNotes: Record<string, string>;
 }
 
 interface Actions {
@@ -82,6 +88,13 @@ interface Actions {
   settleDays: (today?: string) => void;
   setMascotTone: (tone: Gamification["mascotTone"]) => void;
   setDisplayName: (name: string) => void;
+  /** Ticks or unticks one checklist task of a block; ticking them all completes the block. */
+  toggleTask: (blockId: string, task: string, allTasks: string[], today?: string) => void;
+  setBlockNote: (blockId: string, note: string) => void;
+  /** Moves a planned block to another day and keeps it there when the plan is rebuilt. */
+  moveBlock: (blockId: string, date: string, today?: string) => void;
+  updateExam: (deliverableId: string, patch: Partial<ExamDetails>) => void;
+  setCourseSessions: (courseId: string, sessions: CourseSession[]) => void;
   reset: () => void;
 }
 
@@ -108,6 +121,8 @@ const DATA_KEYS = [
   "timer",
   "lastReplan",
   "displayName",
+  "taskChecks",
+  "blockNotes",
 ] as const satisfies readonly (keyof Data)[];
 
 /** Just the data (no functions) — this is what gets saved to your account. */
@@ -128,6 +143,8 @@ const initialData = (): Data => ({
   timer: null,
   lastReplan: null,
   displayName: "",
+  taskChecks: {},
+  blockNotes: {},
 });
 
 export const useStore = create<SyllabuddyState>()(
@@ -329,6 +346,39 @@ export const useStore = create<SyllabuddyState>()(
           set((s) => ({ gamification: settleMissedDays(s.gamification, s.blocks, today) })),
 
         setDisplayName: (name) => set({ displayName: name.slice(0, 40) }),
+
+        toggleTask: (blockId, task, allTasks, today = todayISO()) => {
+          const s = get();
+          const current = s.taskChecks[blockId] ?? [];
+          const next = current.includes(task) ? current.filter((t) => t !== task) : [...current, task];
+          set({ taskChecks: { ...s.taskChecks, [blockId]: next } });
+          const block = get().blocks.find((b) => b.id === blockId);
+          const allDone = allTasks.length > 0 && allTasks.every((t) => next.includes(t));
+          if (block && allDone && block.status !== "done") get().toggleBlock(blockId, today);
+        },
+
+        setBlockNote: (blockId, note) =>
+          set((s) => ({ blockNotes: { ...s.blockNotes, [blockId]: note.slice(0, 2000) } })),
+
+        moveBlock: (blockId, date, today = todayISO()) => {
+          if (date < today) return;
+          set((s) => ({
+            blocks: s.blocks.map((b) =>
+              b.id === blockId && b.status !== "done" ? { ...b, date, status: "planned", pinned: true } : b,
+            ),
+          }));
+          get().generatePlan(today);
+        },
+
+        updateExam: (deliverableId, patch) =>
+          set((s) => ({
+            deliverables: s.deliverables.map((d) =>
+              d.id === deliverableId ? { ...d, exam: { ...d.exam, ...patch } } : d,
+            ),
+          })),
+
+        setCourseSessions: (courseId, sessions) =>
+          set((s) => ({ courses: s.courses.map((c) => (c.id === courseId ? { ...c, sessions } : c)) })),
 
         setMascotTone: (mascotTone) =>
           set((s) => ({ gamification: { ...s.gamification, mascotTone } })),

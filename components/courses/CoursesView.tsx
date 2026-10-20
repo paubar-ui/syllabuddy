@@ -9,6 +9,7 @@ import { buttonPrimary, card, input, label, page } from "@/components/ui";
 import { todayISO } from "@/lib/dates";
 import { requiredScore } from "@/lib/grades";
 import { paceInsights } from "@/lib/pace";
+import { isExam } from "@/lib/examPlan";
 import { useStore } from "@/lib/store";
 import type { Course, Deliverable, Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
@@ -65,8 +66,8 @@ function CoursesContent() {
             </>
           }
         >
-          Add a syllabus and we&apos;ll create the course with all its deadlines and grade weights. Single deadlines you add
-          on Today appear here too.
+          Add a syllabus and we&apos;ll create the course with all its deadlines and grade weights. Single deadlines you
+          add on Today appear here too.
         </EmptyState>
       </main>
     );
@@ -104,8 +105,8 @@ function CoursesContent() {
         </Callout>
         <HowItWorks title="What to do on this page">
           <p>
-            <span className="font-medium">Tick a deliverable</span> when it&apos;s handed in or the exam is over: you get
-            50 points, its remaining study blocks disappear and your pace is updated.
+            <span className="font-medium">Tick a deliverable</span> when it&apos;s handed in or the exam is over: you
+            get 50 points, its remaining study blocks disappear and your pace is updated.
           </p>
           <p>
             <span className="font-medium">Enter your score</span> once you get a grade back. The grade calculator below
@@ -175,7 +176,9 @@ function CourseCard({
             className={`${input} w-auto py-1 text-sm`}
             value={course.effort}
             onChange={(e) => {
-              updateCourse(course.id, { effort: Number(e.target.value) as Effort });
+              updateCourse(course.id, {
+                effort: Number(e.target.value) as Effort,
+              });
               generatePlan(todayISO());
               setAnnouncement("Difficulty updated — your plan was adjusted.");
             }}
@@ -202,9 +205,7 @@ function CourseCard({
                 onChange={(e) => {
                   setDeliverableDone(d.id, e.target.checked, todayISO());
                   setAnnouncement(
-                    e.target.checked
-                      ? `${d.title} marked done. +50 points!`
-                      : `${d.title} marked not done.`,
+                    e.target.checked ? `${d.title} marked done. +50 points!` : `${d.title} marked not done.`,
                   );
                 }}
                 className="mt-1 h-5 w-5 cursor-pointer accent-[var(--success)]"
@@ -216,6 +217,15 @@ function CourseCard({
                   {num(d.estimatedHours)}h logged
                 </span>
               </label>
+              {isExam(d) && !d.done && (
+                <Link
+                  href={`/exam/${d.id}`}
+                  data-testid={`exam-prep-link-${d.id}`}
+                  className="col-start-2 text-sm font-medium text-accent underline underline-offset-2 hover:no-underline sm:col-start-2"
+                >
+                  Open exam prep plan
+                </Link>
+              )}
               <div className="col-start-2 sm:col-start-3">
                 <ScoreInput deliverable={d} scale={course.gradeScale} />
               </div>
@@ -278,7 +288,11 @@ function GradeCalculator({ course, items, testId }: { course: Course; items: Del
 
   let result: { tone: "good" | "info" | "kind"; text: string } | null = null;
   if (validTarget && items.length > 0) {
-    const r = requiredScore(items.map((d) => ({ weight: d.weight, score: d.score })), target, scale);
+    const r = requiredScore(
+      items.map((d) => ({ weight: d.weight, score: d.score })),
+      target,
+      scale,
+    );
     const average = r.currentAverage !== null ? ` So far you're averaging ${num(r.currentAverage)}/${scale}.` : "";
     if (r.alreadySecured) {
       result = {
@@ -336,7 +350,10 @@ function GradeCalculator({ course, items, testId }: { course: Course; items: Del
           }}
         />
       </div>
-      <p aria-live="polite" className={`mt-3 rounded-lg px-3 py-2 text-sm ${result ? toneClass[result.tone] : "text-muted"}`}>
+      <p
+        aria-live="polite"
+        className={`mt-3 rounded-lg px-3 py-2 text-sm ${result ? toneClass[result.tone] : "text-muted"}`}
+      >
         {result?.text ??
           (text && !validTarget
             ? `Enter a target between 0 and ${scale}.`

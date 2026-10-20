@@ -6,12 +6,17 @@
 //   B. Whatever didn't fit goes into free time on earlier days, latest first, back to today.
 //   C. As a last resort the deadline day itself takes up to 25% of the work.
 //   Anything still left becomes a warning.
+// Exams 14 days away or less start straight away: their window is every day until the exam,
+// with a gentler ramp (V2-6). Blocks moved by hand ("pinned") stay where you put them.
 import { addDaysISO, daysBetween, weekdayIndex } from "./dates";
+import { isExam } from "./examPlan";
 import type { Availability, Course, Deliverable, StudyBlock } from "./types";
 
 export const MIN_BLOCK = 25;
 export const MAX_BLOCK = 90;
 export const DEADLINE_DAY_SHARE = 0.25;
+/** Exams this close start being prepared from today. */
+export const EXAM_START_NOW_DAYS = 14;
 
 export interface ScheduleInput {
   courses: Course[];
@@ -43,11 +48,15 @@ export function remainingMinutes(deliverable: Deliverable): number {
   return Math.max(MIN_BLOCK, ceil5(left));
 }
 
-/** Linear ramp of `total` minutes over `days` days; tiny early slices are merged forward. */
-export function rampTargets(total: number, days: number): number[] {
+/**
+ * Linear ramp of `total` minutes over `days` days; tiny early slices are merged forward.
+ * `gentle`: the last day gets about twice the first (instead of `days` times as much).
+ */
+export function rampTargets(total: number, days: number, gentle = false): number[] {
   if (days <= 0) return [];
-  const sum = (days * (days + 1)) / 2;
-  const targets = Array.from({ length: days }, (_, i) => floor5((total * (i + 1)) / sum));
+  const weight = (i: number) => (gentle ? days + i : i + 1);
+  const sum = Array.from({ length: days }, (_, i) => weight(i)).reduce((a, b) => a + b, 0);
+  const targets = Array.from({ length: days }, (_, i) => floor5((total * weight(i)) / sum));
   targets[days - 1] += total - targets.reduce((a, b) => a + b, 0);
 
   let carry = 0;
@@ -99,14 +108,18 @@ export function generateSchedule({
 }: ScheduleInput): ScheduleResult {
   const warnings: string[] = [];
 
-  // Replanning: keep history, turn past planned blocks into missed, drop future planned ones.
+  // Replanning: keep history, turn past planned blocks into missed, drop future planned ones
+  // (except blocks you moved by hand, which stay where you put them).
   const kept: StudyBlock[] = existingBlocks
-    .filter((b) => b.status !== "planned" || b.date < today)
-    .map((b) => (b.status === "planned" ? { ...b, status: "missed" } : b));
+    .filter((b) => b.status !== "planned" || b.date < today || b.pinned)
+    .map((b) => (b.status === "planned" && b.date < today ? { ...b, status: "missed", pinned: false } : b));
 
   const used = new Map<string, number>();
+  const pinnedMinutes = new Map<string, number>();
   for (const b of kept) {
-    if (b.status === "done" && b.date >= today) used.set(b.date, (used.get(b.date) ?? 0) + b.minutes);
+    if (b.date < today) continue;
+    if (b.status === "done" || b.status === "planned") used.set(b.date, (used.get(b.date) ?? 0) + b.minutes);
+    if (b.status === "planned") pinnedMinutes.set(b.deliverableId, (pinnedMinutes.get(b.deliverableId) ?? 0) + b.minutes);
   }
   const free = (date: string) =>
     Math.max(0, dayCapacity(availability, date) - (used.get(date) ?? 0));
@@ -125,7 +138,8 @@ export function generateSchedule({
       warnings.push(`${label}: the due date has passed — mark it done or update the date.`);
       continue;
     }
-    const total = remainingMinutes(d);
+    const left = remainingMinutes(d) - (pinnedMinutes.get(d.id) ?? 0);
+    const total = left <= 0 ? 0 : Math.max(MIN_BLOCK, Math.ceil(left / 5) * 5);
     if (total === 0) continue;
 
     let remaining = total;
@@ -138,12 +152,13 @@ export function generateSchedule({
     };
 
     const daysUntilDue = daysBetween(today, d.dueDate);
-    const leadDays = Math.max(1, Math.ceil(total / 60 / 2));
+    const examSoon = isExam(d) && daysUntilDue <= EXAM_START_NOW_DAYS;
+    const leadDays = examSoon ? daysUntilDue : Math.max(1, Math.ceil(total / 60 / 2));
     const windowLength = Math.min(daysUntilDue, leadDays);
     const windowStart = daysUntilDue - windowLength;
 
-    // A. Back-loaded ramp inside the lead window.
-    rampTargets(total, windowLength).forEach((target, i) => {
+    // A. Back-loaded ramp inside the lead window (gentler for exams that start now).
+    rampTargets(total, windowLength, examSoon).forEach((target, i) => {
       if (target === 0 || remaining === 0) return;
       const date = addDaysISO(today, windowStart + i);
       place(date, chunk(remaining, free(date), target));

@@ -1,5 +1,5 @@
 "use client";
-// /settings: coach tone, weekly availability and days off, study buddies, export/import of your data, reset.
+// /settings: coach tone, weekly availability and days off, export/import of your data, reset.
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,7 +50,6 @@ function SettingsContent() {
         <NameSettings />
         <AvailabilitySettings />
         <ToneSettings />
-        <BuddiesCard />
         <DataSettings />
       </div>
     </main>
@@ -230,6 +229,8 @@ function DataSettings() {
       isDemo: s.isDemo,
       focusMinutes: s.focusMinutes,
       displayName: s.displayName,
+      taskChecks: s.taskChecks,
+      blockNotes: s.blockNotes,
     };
     download(`syllabuddy-backup-${todayISO()}.json`, createBackup(data, new Date()), "application/json");
     setStatus({ error: false, text: "Backup downloaded. Keep it somewhere safe." });
@@ -334,23 +335,6 @@ function DataSettings() {
           </div>
         )}
       </div>
-    </section>
-  );
-}
-
-function BuddiesCard() {
-  return (
-    <section aria-labelledby="buddies-title" className={card}>
-      <h2 id="buddies-title" className="text-lg font-semibold tracking-tight">
-        Study buddies
-      </h2>
-      <p className="text-sm text-muted">
-        Compete with friends on a weekly leaderboard. They only see your display name, points, streak and study hours —
-        never your deadlines, courses or grades.
-      </p>
-      <Link href="/buddies" className={`${buttonSecondary} mt-3`}>
-        Open study buddies
-      </Link>
     </section>
   );
 }

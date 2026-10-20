@@ -168,8 +168,8 @@ test("a full session: sample semester, check a block, plan, export, grade calcul
   await page.goto("/app");
   await page.getByRole("link", { name: "See the leaderboard" }).click();
   await expect(page.getByTestId("leaderboard")).toBeVisible();
-  await page.getByRole("link", { name: "Settings" }).filter({ visible: true }).first().click();
-  await expect(page.getByRole("link", { name: "Open study buddies" })).toBeVisible();
+  await page.getByRole("link", { name: /^(Study buddies|Buddies)$/ }).filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/buddies$/);
 
   await page.goto("/app");
   await page.getByRole("link", { name: /Start a focus session/ }).first().click();
@@ -283,5 +283,61 @@ test("daily briefing: greeting, summary, timeline, coming up — and / opens it 
   await page.goto("/about");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("daily study plan");
   await expect(page.getByRole("link", { name: "Open my plan" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("exam prep plan and session detail: what to study each day, from the syllabus schedule", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await signUp(page, "examprep");
+  await page.getByTestId("demo-button").click();
+  await expect(page.getByTestId("today-list")).toBeVisible();
+
+  // Courses → the Statistics midterm's prep plan
+  await page.getByRole("link", { name: "Courses", exact: true }).filter({ visible: true }).first().click();
+  await page
+    .locator("section", { has: page.getByRole("heading", { name: "Statistics", level: 2 }) })
+    .locator('[data-testid^="exam-prep-link-"]')
+    .first()
+    .click();
+  const prep = page.getByTestId("exam-prep");
+  await expect(prep).toBeVisible();
+  await expect(prep).toContainText("Exam card");
+  await expect(prep).toContainText("Day 1");
+  await expect(prep).toContainText(/Email your professor any questions by/);
+  await expectNoSidewaysScroll(page);
+  await expectNoAxeViolations(page, "/exam");
+
+  // Log a mock mistake: the repair day now targets that topic
+  await page.getByLabel("Topic").selectOption({ index: 2 });
+  const topic = (await page.getByLabel("Topic").locator("option:checked").textContent())!.replace(/^\d+\.\s*/, "");
+  await page.getByLabel("Points lost").fill("8");
+  await page.getByRole("button", { name: "Log it" }).click();
+  await expect(prep.getByText(/8 pts/)).toBeVisible();
+  await expect(prep.locator("li", { hasText: "Repair" }).first()).toContainText(topic);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Add to calendar" }).click();
+  const download = await downloadPromise;
+  expect(readFileSync((await download.path())!, "utf8")).toContain("Day 1:");
+
+  // Today: click a block → the detail panel; Esc closes it and focus goes back
+  await page.goto("/app");
+  const opener = page.locator('[data-testid^="block-open-"]').first();
+  await opener.click();
+  const detail = page.getByTestId("session-detail");
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText("Checklist");
+  await expectNoAxeViolations(page, "/app session detail");
+  await page.keyboard.press("Escape");
+  await expect(detail).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  // Ticking every task marks the block done (and it's saved)
+  await opener.click();
+  const tasks = detail.getByRole("checkbox");
+  for (let i = 0, n = await tasks.count(); i < n; i++) await tasks.nth(i).check();
+  await expect(detail).toContainText("block marked as done");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("points-count")).not.toHaveText("0");
   expect(errors).toEqual([]);
 });

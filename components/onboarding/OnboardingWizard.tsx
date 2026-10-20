@@ -23,10 +23,11 @@ import {
   normalizeExtraction,
   type ExtractedSyllabus,
 } from "@/lib/extraction";
+import { parseSessions } from "@/lib/parseSessions";
 import { parseSyllabus } from "@/lib/parseSyllabus";
 import { extractPdfText } from "@/lib/pdf";
 import { useStore } from "@/lib/store";
-import type { Effort } from "@/lib/types";
+import type { CourseSession, Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
 import { availabilityFromForm, formFromAvailability } from "@/lib/availability";
 import { AvailabilityFields } from "../AvailabilityFields";
@@ -238,8 +239,12 @@ function StepSyllabus({
     if (!useAi && offline.unresolvedWeeks) {
       message += " Some deadlines are given as week numbers — add the semester start date to turn them into dates.";
     }
+    const schedule = parseSessions(text, { today, semesterStart: start });
+    if (schedule.sessions.length > 0) {
+      message += ` We also found a schedule of ${schedule.sessions.length} sessions — used to plan exam prep topic by topic.`;
+    }
     setBusy(false);
-    onDone(draftFromExtraction(result, courseCount), message);
+    onDone(draftFromExtraction(result, courseCount, undefined, schedule), message);
   }
 
   return (
@@ -566,10 +571,31 @@ function StepReview({
                       >
                         Remove
                       </button>
+                      {item.exam && (
+                        <p className="col-span-2 text-xs text-muted sm:col-span-5">
+                          <span className="font-medium text-ink">Exam details found: </span>
+                          {[
+                            item.exam.format,
+                            item.exam.durationMinutes ? `${item.exam.durationMinutes} min` : null,
+                            item.exam.materials,
+                            item.exam.coversSessions?.length
+                              ? `covers sessions ${item.exam.coversSessions[0]}–${item.exam.coversSessions.at(-1)}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "none"}
+                          . You can change them later on the exam&apos;s prep page.
+                        </p>
+                      )}
                     </li>
                   );
                 })}
               </ul>
+
+              <SessionTable
+                sessions={course.sessions}
+                onChange={(sessions) => updateCourse(course.id, { sessions })}
+              />
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <button
@@ -686,5 +712,70 @@ function StepAvailability({
         </button>
       </div>
     </section>
+  );
+}
+
+/** The session schedule found in the syllabus, editable before saving. */
+function SessionTable({
+  sessions,
+  onChange,
+}: {
+  sessions: CourseSession[];
+  onChange: (sessions: CourseSession[]) => void;
+}) {
+  if (sessions.length === 0) return null;
+  const update = (number: number, patch: Partial<CourseSession>) =>
+    onChange(sessions.map((s) => (s.number === number ? { ...s, ...patch } : s)));
+  return (
+    <details className="mt-4 rounded-lg border border-line">
+      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-accent">
+        Session schedule — {sessions.length} sessions found (check the topics)
+      </summary>
+      <div className="overflow-x-auto px-3 pb-3">
+        <p className="text-xs text-muted">
+          Used to plan exam prep topic by topic. Fix a topic or its key concepts (separated by commas) if something looks
+          off.
+        </p>
+        <table className="mt-2 w-full text-left text-sm">
+          <thead className="text-xs text-muted">
+            <tr>
+              <th scope="col" className="py-1 pr-2 font-medium">#</th>
+              <th scope="col" className="py-1 pr-2 font-medium">Topic</th>
+              <th scope="col" className="py-1 pr-2 font-medium">Key concepts</th>
+              <th scope="col" className="py-1 font-medium">Reading / problem sets</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.number} className="border-t border-line align-top">
+                <td className="py-1.5 pr-2 tabular-nums text-muted">{s.number}</td>
+                <td className="py-1.5 pr-2">
+                  <input
+                    aria-label={`Topic of session ${s.number}`}
+                    className={`${input} py-1 text-sm`}
+                    value={s.topic}
+                    onChange={(e) => update(s.number, { topic: e.target.value })}
+                  />
+                </td>
+                <td className="py-1.5 pr-2">
+                  <input
+                    aria-label={`Key concepts of session ${s.number}`}
+                    className={`${input} py-1 text-sm`}
+                    defaultValue={s.concepts.join(", ")}
+                    // Split into concepts when you leave the field, so typing a comma works normally.
+                    onBlur={(e) =>
+                      update(s.number, {
+                        concepts: e.target.value.split(",").map((c) => c.trim()).filter(Boolean),
+                      })
+                    }
+                  />
+                </td>
+                <td className="py-1.5 text-xs text-muted">{[...s.readings, ...s.problemSets].join(" · ") || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }

@@ -3,6 +3,7 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { SessionDetail } from "@/components/SessionDetail";
 import { Callout, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
 import { buttonPrimary, buttonSecondary, card, pageWide } from "@/components/ui";
 import { addDaysISO, todayISO } from "@/lib/dates";
@@ -45,6 +46,7 @@ function PlanContent() {
   const [today] = useState(todayISO);
   const [monday, setMonday] = useState(() => weekStart(today));
   const [exported, setExported] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const deliverableById = useMemo(() => new Map(deliverables.map((d) => [d.id, d])), [deliverables]);
@@ -53,10 +55,7 @@ function PlanContent() {
   if (courses.length === 0) {
     return (
       <main id="main" className={pageWide}>
-        <PageHeader
-          title="Plan"
-          description="Your study blocks week by week, and how busy the whole semester looks."
-        />
+        <PageHeader title="Plan" description="Your study blocks week by week, and how busy the whole semester looks." />
         <EmptyState
           title="Nothing planned yet"
           action={
@@ -124,8 +123,8 @@ function PlanContent() {
               Week of {pretty(monday, "d MMMM")}
             </h2>
             <p className="text-sm text-muted">
-              {hoursText(weekMinutes)} planned this week. Use the arrows to look ahead; the coloured edge shows the course,
-              red labels are deadlines.
+              {hoursText(weekMinutes)} planned this week. Use the arrows to look ahead; the coloured edge shows the
+              course, red labels are deadlines.
             </p>
           </div>
           <div className="flex gap-2">
@@ -171,7 +170,10 @@ function PlanContent() {
                 </h3>
                 <ul className="mt-2 space-y-1.5">
                   {due.map((d) => (
-                    <li key={d.id} className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-xs font-semibold text-danger">
+                    <li
+                      key={d.id}
+                      className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-xs font-semibold text-danger"
+                    >
                       Due: {d.title}
                     </li>
                   ))}
@@ -182,16 +184,25 @@ function PlanContent() {
                       <li
                         key={b.id}
                         className="rounded-lg border border-line px-2 py-1 text-xs"
-                        style={{ borderLeft: `4px solid ${course?.color ?? "var(--accent)"}` }}
+                        style={{
+                          borderLeft: `4px solid ${course?.color ?? "var(--accent)"}`,
+                        }}
                       >
-                        <span className={`block font-medium ${b.status === "done" ? "line-through" : ""}`}>
-                          {d?.title ?? "Study block"}
-                        </span>
-                        <span className="text-muted">
-                          {b.minutes} min
-                          {b.status === "done" && " · done"}
-                          {b.status === "missed" && " · missed"}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailId(b.id)}
+                          aria-haspopup="dialog"
+                          className="block w-full rounded text-left hover:bg-surface-2"
+                        >
+                          <span className={`block font-medium ${b.status === "done" ? "line-through" : ""}`}>
+                            {d?.title ?? "Study block"}
+                          </span>
+                          <span className="text-muted">
+                            {b.minutes} min
+                            {b.status === "done" && " · done"}
+                            {b.status === "missed" && " · missed"}
+                          </span>
+                        </button>
                       </li>
                     );
                   })}
@@ -301,12 +312,16 @@ function PlanContent() {
         <HowItWorks title="How to add your plan to Google Calendar">
           <p>1. Click “Export to calendar” — a file called syllabuddy.ics downloads.</p>
           <p>
-            2. In Google Calendar, open Settings → Import &amp; export → Import, choose the file and a calendar (tip: create
-            an empty “Syllabuddy” calendar first so you can remove it in one go).
+            2. In Google Calendar, open Settings → Import &amp; export → Import, choose the file and a calendar (tip:
+            create an empty “Syllabuddy” calendar first so you can remove it in one go).
           </p>
-          <p>3. Study blocks appear from 18:00 each day; deadlines appear as all-day events. Export again after big changes.</p>
+          <p>
+            3. Study blocks appear from 18:00 each day; deadlines appear as all-day events. Export again after big
+            changes.
+          </p>
         </HowItWorks>
       </div>
+      <SessionDetail blockId={detailId} today={today} onClose={() => setDetailId(null)} />
     </main>
   );
 }

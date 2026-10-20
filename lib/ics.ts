@@ -116,3 +116,42 @@ export function buildIcs({ courses, deliverables, blocks, now, startHour = 18 }:
   lines.push("END:VCALENDAR");
   return lines.map(foldLine).join("\r\n") + "\r\n";
 }
+
+/** An exam prep plan as all-day events, one per day, with that day's tasks (V2-6). */
+export function buildExamPlanIcs({
+  examTitle,
+  courseName,
+  days,
+  now,
+}: {
+  examTitle: string;
+  courseName: string;
+  days: { date: string; title: string; goal: string; tasks: string[]; dayNumber: number }[];
+  now: Date;
+}): string {
+  const stamp = icsUtc(now);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Syllabuddy//Exam prep plan//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${escapeText(`${examTitle} prep`)}`,
+  ];
+  const slug = examTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  for (const day of days) {
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:exam-prep-${slug}-${day.date}@syllabuddy`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(day.date)}`,
+      `DTEND;VALUE=DATE:${icsDate(addDaysISO(day.date, 1))}`,
+      `SUMMARY:${escapeText(`${examTitle} · Day ${day.dayNumber}: ${day.title} (${courseName})`)}`,
+      `DESCRIPTION:${escapeText([day.goal, "", ...day.tasks.map((t) => `- ${t}`)].join("\n"))}`,
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    );
+  }
+  lines.push("END:VCALENDAR");
+  return lines.map(foldLine).join("\r\n") + "\r\n";
+}

@@ -6,6 +6,30 @@ import { DELIVERABLE_TYPES } from "./extraction";
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const effort = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
 
+const sessionSchema = z.object({
+  number: z.number(),
+  date: isoDay.optional(),
+  topic: z.string(),
+  concepts: z.array(z.string()),
+  readings: z.array(z.string()),
+  problemSets: z.array(z.string()),
+});
+
+const level = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
+
+const examSchema = z.object({
+  format: z.string().optional(),
+  durationMinutes: z.number().positive().optional(),
+  materials: z.string().optional(),
+  time: z.string().optional(),
+  coversSessions: z.array(z.number()).optional(),
+  focus: z.record(z.coerce.number(), z.enum(["core", "light"])).optional(),
+  confidence: z.record(z.coerce.number(), level).optional(),
+  mockLog: z
+    .array(z.object({ session: z.number(), points: z.number().min(0), reason: z.enum(["concept", "algebra", "time"]) }))
+    .optional(),
+});
+
 const dataSchema = z.object({
   courses: z.array(
     z.object({
@@ -16,6 +40,7 @@ const dataSchema = z.object({
       targetGrade: z.number().optional(),
       gradeScale: z.number().positive(),
       attendancePolicy: z.string().optional(),
+      sessions: z.array(sessionSchema).optional(),
     }),
   ),
   deliverables: z.array(
@@ -30,6 +55,7 @@ const dataSchema = z.object({
       estimatedHours: z.number().min(0),
       loggedMinutes: z.number().min(0),
       done: z.boolean(),
+      exam: examSchema.optional(),
     }),
   ),
   blocks: z.array(
@@ -39,6 +65,7 @@ const dataSchema = z.object({
       date: isoDay,
       minutes: z.number().positive(),
       status: z.enum(["planned", "done", "missed"]),
+      pinned: z.boolean().optional(),
     }),
   ),
   availability: z.object({
@@ -63,6 +90,8 @@ const dataSchema = z.object({
   isDemo: z.boolean().default(false),
   focusMinutes: z.record(z.string(), z.number()).default({}),
   displayName: z.string().max(40).default(""),
+  taskChecks: z.record(z.string(), z.array(z.string())).default({}),
+  blockNotes: z.record(z.string(), z.string()).default({}),
 });
 
 export type BackupData = z.infer<typeof dataSchema>;

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useSession } from "@/lib/session";
 
-const PROTECTED = ["/app", "/today", "/plan", "/courses", "/focus", "/panic", "/settings", "/onboarding", "/buddies"];
+const PROTECTED = ["/app", "/today", "/plan", "/courses", "/focus", "/panic", "/settings", "/onboarding", "/buddies", "/exam"];
 
 export const isProtectedPath = (path: string) =>
   PROTECTED.some((p) => path === p || path.startsWith(`${p}/`));

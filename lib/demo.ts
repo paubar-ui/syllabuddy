@@ -2,7 +2,7 @@
 // Due dates are relative to "today", spread over the next 10 weeks.
 import { addDaysISO } from "./dates";
 import { estimateHours } from "./estimate";
-import type { Availability, Course, Deliverable, DeliverableType } from "./types";
+import type { Availability, Course, CourseSession, Deliverable, DeliverableType, ExamDetails } from "./types";
 
 export const DEMO_AVAILABILITY: Availability = {
   minutesPerWeekday: [210, 210, 210, 210, 150, 120, 180], // Mon..Sun ≈ 21.5h a week
@@ -11,6 +11,31 @@ export const DEMO_AVAILABILITY: Availability = {
 };
 
 type DemoItem = [title: string, type: DeliverableType, weight: number, daysFromToday: number];
+
+/** [number, days from today, topic, concepts, reading, problem set] */
+type DemoSession = [number, number, string, string[], string, string?];
+
+// Statistics has a full session schedule and a midterm 10 days from today,
+// so the sample semester shows an exam prep plan straight away (V2-6).
+const STATS_SESSIONS: DemoSession[] = [
+  [1, -24, "Descriptive statistics", ["mean and median", "variance", "standard deviation"], "Ch. 1–2", "PS1"],
+  [2, -20, "Probability", ["sample spaces", "conditional probability", "Bayes' rule"], "Ch. 3", "PS2"],
+  [3, -17, "Random variables", ["expected value", "variance of a random variable", "binomial distribution"], "Ch. 4", "PS3"],
+  [4, -13, "The normal distribution", ["z-scores", "standardising", "normal approximation"], "Ch. 5", "PS4"],
+  [5, -6, "Sampling distributions", ["central limit theorem", "standard error"], "Ch. 6", "PS5"],
+  [6, 3, "Confidence intervals", ["intervals for a mean", "t-distribution", "margin of error"], "Ch. 7"],
+  [7, 13, "Hypothesis testing", ["p-values", "type I and II errors"], "Ch. 8", "PS6"],
+  [8, 20, "Comparing two groups", ["two-sample t-test", "paired samples"], "Ch. 9"],
+  [9, 27, "Correlation and regression", ["least squares", "R²"], "Ch. 10", "PS7"],
+  [10, 34, "Multiple regression", ["interpreting coefficients", "dummy variables"], "Ch. 11"],
+];
+
+const STATS_MIDTERM: ExamDetails = {
+  format: "problems + short-answer questions",
+  durationMinutes: 90,
+  materials: "closed book, one formula sheet, calculator allowed",
+  coversSessions: [1, 2, 3, 4, 5, 6],
+};
 
 const DEMO_COURSES: (Omit<Course, "id"> & { key: string; items: DemoItem[] })[] = [
   {
@@ -52,8 +77,8 @@ const DEMO_COURSES: (Omit<Course, "id"> & { key: string; items: DemoItem[] })[] 
     targetGrade: 75,
     items: [
       ["Quiz 1: Probability", "quiz", 10, 2],
-      ["Problem set: Regression", "homework", 10, 15],
-      ["Midterm exam", "midterm", 25, 30],
+      ["Midterm exam", "midterm", 25, 10],
+      ["Problem set: Regression", "homework", 10, 30],
       ["Quiz 2: Inference", "quiz", 10, 47],
       ["Final exam", "final", 45, 70],
     ],
@@ -81,9 +106,21 @@ export function createDemoSemester(today: string): { courses: Course[]; delivera
 
   for (const { key, items, ...course } of DEMO_COURSES) {
     const courseId = `demo-${key}`;
-    courses.push({ id: courseId, ...course });
+    const sessions: CourseSession[] | undefined =
+      key === "stats"
+        ? STATS_SESSIONS.map(([number, days, topic, concepts, reading, ps]) => ({
+            number,
+            date: addDaysISO(today, days),
+            topic,
+            concepts,
+            readings: [reading],
+            problemSets: ps ? [ps] : [],
+          }))
+        : undefined;
+    courses.push({ id: courseId, ...course, ...(sessions ? { sessions } : {}) });
     items.forEach(([title, type, weight, days], i) => {
       deliverables.push({
+        ...(key === "stats" && type === "midterm" ? { exam: STATS_MIDTERM } : {}),
         id: `${courseId}-${i + 1}`,
         courseId,
         title,

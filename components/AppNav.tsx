@@ -14,16 +14,19 @@ const ICONS = {
   today: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   plan: "M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z",
   courses: "M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2V5Zm0 14a2 2 0 0 1 2-2h12",
+  buddies:
+    "M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm13 9v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8",
   settings:
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 3h-4l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z",
 };
 
-/** The 4 main destinations; detail pages count as part of their parent. */
+/** The 5 main destinations; detail pages count as part of their parent. */
 const ITEMS = [
   { href: "/app", label: "Today", icon: ICONS.today, also: ["/focus", "/panic"] },
   { href: "/plan", label: "Plan", icon: ICONS.plan, also: [] },
-  { href: "/courses", label: "Courses", icon: ICONS.courses, also: ["/onboarding"] },
-  { href: "/settings", label: "Settings", icon: ICONS.settings, also: ["/buddies"] },
+  { href: "/courses", label: "Courses", icon: ICONS.courses, also: ["/onboarding", "/exam"] },
+  { href: "/buddies", label: "Study buddies", short: "Buddies", icon: ICONS.buddies, also: [] },
+  { href: "/settings", label: "Settings", icon: ICONS.settings, also: [] },
 ];
 
 function NavIcon({ d }: { d: string }) {
@@ -166,7 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   }`}
                 >
                   <NavIcon d={item.icon} />
-                  {item.label}
+                  {item.short ?? item.label}
                 </Link>
               </li>
             );
