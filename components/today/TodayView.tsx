@@ -5,16 +5,25 @@ import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoButton } from "@/components/DemoButton";
-import { Callout, CourseDot, EmptyState, HowItWorks, PageHeader, SectionHeader } from "@/components/kit";
+import { Callout, CourseDot, HowItWorks, PageHeader } from "@/components/kit";
 import { MascotBubble } from "@/components/Tick";
 import { AddDeadline, DeadlineList } from "@/components/today/Deadlines";
 import { buttonPrimary, buttonSecondary, card, page } from "@/components/ui";
 import { detectBurnout } from "@/lib/burnout";
-import { addDaysISO, daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
+import {
+  comingUp,
+  getAheadSuggestion,
+  greeting,
+  headsUp,
+  summaryLine,
+  todayTimeline,
+  yesterdayStats,
+  type HeadsUp,
+} from "@/lib/briefing";
+import { daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
 import { blockPoints } from "@/lib/gamification";
 import { weeklyStats } from "@/lib/leaderboard";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
-import { formatHours } from "@/lib/scheduler";
 import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/useHydrated";
 
@@ -45,7 +54,9 @@ function TodayContent() {
   const lastReplan = useStore((s) => s.lastReplan);
   const availability = useStore((s) => s.availability);
   const [announcement, setAnnouncement] = useState("");
-  const [replanSeen, setReplanSeen] = useState(false);
+  const [replanDismissed, setReplanDismissed] = useState(false);
+  const displayName = useStore((s) => s.displayName);
+  const [hour] = useState(() => new Date().getHours());
 
   // "Today" is read once per visit, so the page doesn't change under you at midnight.
   const [today] = useState(todayISO);
@@ -60,7 +71,6 @@ function TodayContent() {
     });
   }, [settleDays, replanIfNeeded, today]);
 
-  const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const deliverableById = useMemo(() => new Map(deliverables.map((d) => [d.id, d])), [deliverables]);
   const dateLine = format(parseISO(today), "EEEE d MMMM");
 
@@ -119,30 +129,38 @@ function TodayContent() {
     );
   }
 
-  const todayBlocks = blocks.filter((b) => b.date === today);
+  const timeline = todayTimeline(blocks, deliverables, courses, today);
+  const todayBlocks = timeline.map((t) => t.block);
   const doneMinutes = todayBlocks.filter((b) => b.status === "done").reduce((s, b) => s + b.minutes, 0);
   const totalMinutes = todayBlocks.reduce((s, b) => s + b.minutes, 0);
-  const nextBlock = blocks.find((b) => b.date > today && b.status === "planned");
-  const yesterday = addDaysISO(today, -1);
-  const missedYesterday = blocks.some((b) => b.date === yesterday && b.status !== "done");
-  const upcoming = deliverables
-    .filter((d) => !d.done)
-    .map((d) => ({ d, days: daysBetween(today, d.dueDate) }))
-    .filter(({ days }) => days >= 0 && days <= 3)
-    .sort((a, b) => a.days - b.days || b.d.weight - a.d.weight);
+  const upcomingWeek = comingUp(deliverables, courses, today, 7);
+  const next = upcomingWeek[0];
+  const yesterday = yesterdayStats(blocks, today);
+  const missedYesterday = yesterday.total > yesterday.done;
+  const getAhead = getAheadSuggestion(blocks, today);
+  const getAheadDeliverable = getAhead ? deliverableById.get(getAhead.deliverableId) : undefined;
 
   const burnout = detectBurnout({ history: gamification.history, availability, today });
   const replannedToday = lastReplan?.date === today && lastReplan.blocks > 0;
   const protectedTonight = availability.daysOff.includes(today);
-  const next = upcoming[0];
-  const nextBlockDays = nextBlock ? daysBetween(today, nextBlock.date) : null;
+  const alerts = headsUp({
+    today,
+    burnout,
+    protectedTonight,
+    lastReplan,
+    replanDismissed,
+    deliverables,
+    blocks,
+    availability,
+  });
+
   // On a protected evening the coach only talks about resting.
   const situation = protectedTonight
     ? "freeDay"
     : pickSituation({
         todayBlocks,
         missedYesterday,
-        nextDeadlineDays: next?.days ?? null,
+        nextDeadlineDays: next && next.daysLeft <= 3 ? next.daysLeft : null,
         streak: gamification.streak,
         replanned: replannedToday,
         burnout: burnout.triggered,
@@ -153,14 +171,14 @@ function TodayContent() {
     {
       minutes: totalMinutes,
       count: todayBlocks.length,
-      title: next?.d.title,
+      title: next?.deliverable.title,
       when:
         situation === "freeDay"
-          ? nextBlockDays !== null
-            ? describeDaysAway(nextBlockDays)
+          ? getAhead
+            ? describeDaysAway(daysBetween(today, getAhead.date))
             : "soon"
           : next
-            ? describeDaysAway(next.days)
+            ? describeDaysAway(next.daysLeft)
             : "",
       streak: gamification.streak,
     },
@@ -176,108 +194,228 @@ function TodayContent() {
     setAnnouncement(wasDone ? `Unchecked. ${points} points removed.` : `Nice! +${points} points.`);
   }
 
+  function runAction(alert: HeadsUp) {
+    if (alert.action.kind === "protectTonight") {
+      protectTonight(today);
+      setAnnouncement("Tonight is protected. Today's study blocks were moved to other days.");
+    } else if (alert.action.kind === "dismissReplan") {
+      setReplanDismissed(true);
+    }
+  }
+
   return (
     <main id="main" className={page}>
-      <PageHeader
-        eyebrow={dateLine}
-        title="Today"
-        description="Your plan for today. Tick off study blocks as you finish them — Syllabuddy keeps the rest of your semester on track."
-      />
+      {/* ---------------- Daily briefing ---------------- */}
+      <section
+        data-testid="daily-briefing"
+        aria-labelledby="briefing-title"
+        className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm text-muted">{dateLine}</p>
+            <h1 id="briefing-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {greeting(hour, displayName)}
+            </h1>
+          </div>
+          {isDemo && (
+            <p className="rounded-md border border-info-line bg-info-soft px-2.5 py-1 text-xs font-medium text-info-ink">
+              Sample semester ·{" "}
+              <Link href="/onboarding" className="underline underline-offset-2 hover:no-underline">
+                use my own syllabi
+              </Link>
+            </p>
+          )}
+        </div>
+        <p className="mt-1 text-muted">{summaryLine(timeline, next)}</p>
 
-      <AddDeadline today={today} />
-
-      <div className="mt-4">
-        <MascotBubble message={message} />
-      </div>
-
-      {/* Progress */}
-      <section aria-labelledby="progress-title" className="mt-6">
-        <h2 id="progress-title" className="sr-only">
-          Your progress
-        </h2>
-        <dl className="grid grid-cols-3 gap-3">
+        {/* Progress */}
+        <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
           <Stat label="Day streak" testId="streak-count" value={gamification.streak} tone="warn" />
           <Stat label="Points" testId="points-count" value={gamification.points} tone="accent" />
           <Stat label="Streak freezes" value={gamification.streakFreezes} tone="info" />
         </dl>
         <p className="mt-2 text-xs text-muted">
-          Finish all of a day&apos;s blocks to grow your streak; every 7 days earns a freeze that protects it on a missed
-          day.{" "}
+          {yesterday.total > 0
+            ? `Yesterday you did ${yesterday.done} of ${yesterday.total} block${yesterday.total === 1 ? "" : "s"}. `
+            : ""}
+          Finish all of today&apos;s blocks to grow your streak.{" "}
           <Link href="/buddies" className="font-medium text-accent underline underline-offset-2 hover:no-underline">
             See the leaderboard
           </Link>
         </p>
-      </section>
 
-      {/* Notices */}
-      <div className="mt-6 space-y-3">
-        {isDemo && (
-          <Callout
-            tone="info"
-            title="You're looking at a sample semester"
-            action={
-              <Link href="/onboarding" className={buttonSecondary}>
-                Use my own syllabi
+        {/* Heads up */}
+        {(alerts.length > 0 || protectedTonight) && (
+          <div className="mt-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Heads up</h2>
+            <div className="mt-2 space-y-2">
+              {protectedTonight && (
+                <Callout tone="success" role="status" title="Tonight is protected">
+                  No study planned today — enjoy your evening. Your blocks were moved to other days.
+                </Callout>
+              )}
+              {alerts.map((alert) => (
+                <Callout
+                  key={alert.id}
+                  tone={alert.tone}
+                  title={alert.title}
+                  action={
+                    alert.action.kind === "link" ? (
+                      <Link href={alert.action.href} className={buttonSecondary}>
+                        {alert.action.label}
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => runAction(alert)}
+                        className={alert.action.kind === "protectTonight" ? buttonPrimary : buttonSecondary}
+                      >
+                        {alert.action.label}
+                      </button>
+                    )
+                  }
+                >
+                  {alert.text}
+                </Callout>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Today's timeline */}
+        <div className="mt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="today-blocks" className="text-sm font-semibold uppercase tracking-wider text-muted">
+              Today&apos;s plan
+            </h2>
+            {totalMinutes > 0 && (
+              <p className="text-xs text-muted">
+                {doneMinutes} of {totalMinutes} min done
+              </p>
+            )}
+          </div>
+          {totalMinutes > 0 && (
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2"
+              role="progressbar"
+              aria-label="Today's progress"
+              aria-valuemin={0}
+              aria-valuemax={totalMinutes}
+              aria-valuenow={doneMinutes}
+            >
+              <div className="h-full rounded-full bg-accent" style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }} />
+            </div>
+          )}
+          <ul data-testid="today-list" aria-labelledby="today-blocks" className="mt-2 divide-y divide-line">
+            {timeline.length === 0 && (
+              <li className="py-3">
+                <p className="font-medium">Free day</p>
+                <p className="text-sm text-muted">
+                  {protectedTonight
+                    ? "Rest is part of the plan."
+                    : "Nothing planned today. Rest, or get a little ahead if you feel like it."}
+                </p>
+                {!protectedTonight && getAhead && getAheadDeliverable && (
+                  <Link href={`/focus/${getAhead.id}`} className={`${buttonSecondary} mt-2`}>
+                    Get ahead: {getAheadDeliverable.title} ({getAhead.minutes} min)
+                  </Link>
+                )}
+              </li>
+            )}
+            {timeline.map(({ block, start, title, courseName, color }) => {
+              const done = block.status === "done";
+              const d = deliverableById.get(block.deliverableId);
+              const dueIn = d ? daysBetween(today, d.dueDate) : null;
+              const inputId = `block-${block.id}`;
+              return (
+                <li key={block.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-11 shrink-0 text-xs tabular-nums text-muted">{start}</span>
+                  <input
+                    id={inputId}
+                    type="checkbox"
+                    data-testid={`block-checkbox-${block.id}`}
+                    checked={done}
+                    onChange={() => onToggle(block.id)}
+                    className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
+                  />
+                  <label htmlFor={inputId} className="min-w-0 flex-1 cursor-pointer">
+                    <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>{title}</span>
+                    <span className="flex items-center gap-1.5 text-sm text-muted">
+                      <CourseDot color={color} />
+                      {courseName}
+                      {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
+                    </span>
+                  </label>
+                  <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="rounded-md bg-surface-2 px-2 py-0.5 text-sm font-medium tabular-nums">
+                      {block.minutes} min
+                    </span>
+                    {!done && (
+                      <Link
+                        href={`/focus/${block.id}`}
+                        aria-label={`Start a focus session for ${title}`}
+                        className="rounded-md px-2 py-0.5 text-sm font-semibold text-accent hover:bg-accent-soft"
+                      >
+                        Focus
+                      </Link>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p aria-live="polite" className="sr-only">
+            {announcement}
+          </p>
+          {warnings.length > 0 && (
+            <p className="mt-2 text-sm text-warn-ink">
+              {warnings.length} deadline{warnings.length === 1 ? "" : "s"} didn&apos;t fully fit in your free time.{" "}
+              <Link href="/plan" className="font-medium underline underline-offset-2 hover:no-underline">
+                See details on Plan
               </Link>
-            }
-          >
-            Explore freely — tick blocks, try the focus timer, open Panic mode. When you&apos;re ready, add your real
-            courses and the samples are replaced.
-          </Callout>
-        )}
-        {burnout.triggered && (
-          <Callout
-            tone="success"
-            title="Time for a breather?"
-            action={
-              <button
-                type="button"
-                onClick={() => {
-                  protectTonight(today);
-                  setAnnouncement("Tonight is protected. Today's study blocks were moved to other days.");
-                }}
-                className={buttonPrimary}
-              >
-                Protect tonight
-              </button>
-            }
-          >
-            {burnout.reason === "overwork"
-              ? `You've studied more than your daily limit for ${burnout.days} days in a row.`
-              : `You've studied ${burnout.days} days in a row without a day off.`}{" "}
-            Resting tonight helps you remember more tomorrow — your plan will make room for it.
-          </Callout>
-        )}
-        {protectedTonight && (
-          <Callout tone="success" role="status" title="Tonight is protected">
-            No study planned today. Enjoy your evening — your blocks were moved to other days.
-          </Callout>
-        )}
-        {replannedToday && !replanSeen && lastReplan && (
-          <Callout
-            tone="info"
-            role="status"
-            title="Your plan was updated"
-            action={
-              <button type="button" onClick={() => setReplanSeen(true)} className={buttonSecondary}>
-                Got it
-              </button>
-            }
-          >
-            {lastReplan.blocks} study block{lastReplan.blocks === 1 ? "" : "s"} from earlier days didn&apos;t happen —
-            that&apos;s okay. The {formatHours(lastReplan.minutes)} were moved into your plan, starting today.
-          </Callout>
-        )}
-        {warnings.length > 0 && (
-          <Callout tone="warn" title={`${warnings.length} thing${warnings.length === 1 ? "" : "s"} didn't fit in your plan`}>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              {warnings.map((w) => (
-                <li key={w}>{w}</li>
+            </p>
+          )}
+        </div>
+
+        {/* Coming up */}
+        <div className="mt-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Coming up · next 7 days</h2>
+          {upcomingWeek.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">Nothing due in the next 7 days.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {upcomingWeek.map(({ deliverable: d, courseName, color, daysLeft }) => (
+                <li key={d.id} className="flex items-center gap-3 text-sm">
+                  <span className="w-14 shrink-0 tabular-nums text-muted">{format(parseISO(d.dueDate), "EEE d")}</span>
+                  <CourseDot color={color} />
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium">{d.title}</span>
+                    <span className="text-muted"> · {courseName}</span>
+                  </span>
+                  <span className="shrink-0 text-muted">{d.weight}%</span>
+                  {daysLeft <= 1 && (
+                    <span className="shrink-0 rounded-md border border-danger-line bg-danger-soft px-1.5 py-0.5 text-xs font-semibold text-danger">
+                      {describeDaysAway(daysLeft)}
+                    </span>
+                  )}
+                </li>
               ))}
             </ul>
-            <p className="mt-1">Try adding more study time in Settings, or use Panic mode to decide what to skip.</p>
-          </Callout>
-        )}
+          )}
+        </div>
+
+        <div className="mt-5">
+          <MascotBubble message={message} />
+        </div>
+      </section>
+
+      {/* ---------------- Main action and the rest ---------------- */}
+      <div className="mt-6">
+        <AddDeadline today={today} />
+      </div>
+
+      <div className="mt-6">
         <Callout
           tone="danger"
           title="Too much due at once?"
@@ -292,119 +430,23 @@ function TodayContent() {
         </Callout>
       </div>
 
-      {/* Today's study blocks */}
-      <section aria-labelledby="today-blocks" className="mt-8">
-        <SectionHeader
-          id="today-blocks"
-          title="Today's study blocks"
-          hint="Each block is one focused session for a deadline. Tick it when you're done, or press Focus to start a 25-minute timer."
-          action={
-            totalMinutes > 0 ? (
-              <p className="text-sm text-muted">
-                {doneMinutes} of {totalMinutes} min done
-              </p>
-            ) : undefined
-          }
-        />
-        {totalMinutes > 0 && (
-          <div
-            className="mb-3 h-1.5 overflow-hidden rounded-full bg-surface-2"
-            role="progressbar"
-            aria-label="Today's progress"
-            aria-valuemin={0}
-            aria-valuemax={totalMinutes}
-            aria-valuenow={doneMinutes}
-          >
-            <div className="h-full rounded-full bg-accent" style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }} />
-          </div>
-        )}
-
-        <ul data-testid="today-list" className="space-y-2">
-          {todayBlocks.length === 0 && (
-            <li>
-              <EmptyState title="Nothing planned today">
-                {nextBlock ? (
-                  <>
-                    Your next study block is on{" "}
-                    <span className="font-medium text-ink">{format(parseISO(nextBlock.date), "EEEE d MMMM")}</span>
-                    {deliverableById.get(nextBlock.deliverableId) &&
-                      ` (${deliverableById.get(nextBlock.deliverableId)?.title})`}
-                    . Enjoy the breather, or get ahead on something in Plan.
-                  </>
-                ) : (
-                  "Add a deadline above and your study blocks will appear here."
-                )}
-              </EmptyState>
-            </li>
-          )}
-          {todayBlocks.map((block) => {
-            const d = deliverableById.get(block.deliverableId);
-            const course = d ? courseById.get(d.courseId) : undefined;
-            const done = block.status === "done";
-            const dueIn = d ? daysBetween(today, d.dueDate) : null;
-            const inputId = `block-${block.id}`;
-            return (
-              <li
-                key={block.id}
-                className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3 sm:p-4"
-                style={{ borderLeft: `4px solid ${course?.color ?? "var(--accent)"}` }}
-              >
-                <input
-                  id={inputId}
-                  type="checkbox"
-                  data-testid={`block-checkbox-${block.id}`}
-                  checked={done}
-                  onChange={() => onToggle(block.id)}
-                  className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
-                />
-                <label htmlFor={inputId} className="min-w-0 flex-1 cursor-pointer">
-                  <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>
-                    {d?.title ?? "Study block"}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-sm text-muted">
-                    <CourseDot color={course?.color} />
-                    {course?.name}
-                    {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
-                  </span>
-                </label>
-                <span className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="rounded-md bg-surface-2 px-2 py-0.5 text-sm font-medium tabular-nums">
-                    {block.minutes} min
-                  </span>
-                  {!done && (
-                    <Link
-                      href={`/focus/${block.id}`}
-                      aria-label={`Start a focus session for ${d?.title ?? "this block"}`}
-                      className="rounded-md px-2 py-0.5 text-sm font-semibold text-accent hover:bg-accent-soft"
-                    >
-                      Focus
-                    </Link>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-        <p aria-live="polite" className="sr-only">
-          {announcement}
-        </p>
-        <div className="mt-3">
-          <HowItWorks title="How your plan is made">
-            <p>
-              Every deadline gets an estimate in hours, based on its type, its weight in your grade and how hard the course
-              is for you.
-            </p>
-            <p>
-              That time is spread over the days before the deadline — a little more each day as it gets closer, never all on
-              the last night — and fitted around the free time you set in Settings.
-            </p>
-            <p>
-              Missed a block? It&apos;s moved forward automatically. Mark work as done on Courses and Syllabuddy learns how
-              long things really take you.
-            </p>
-          </HowItWorks>
-        </div>
-      </section>
+      <div className="mt-4">
+        <HowItWorks title="How your plan is made">
+          <p>
+            Every deadline gets an estimate in hours, based on its type, its weight in your grade and how hard the course
+            is for you.
+          </p>
+          <p>
+            That time is spread over the days before the deadline — a little more each day as it gets closer, never all on
+            the last night — and fitted around the free time you set in Settings. Times on the plan are suggestions,
+            starting at 18:00; study whenever suits you.
+          </p>
+          <p>
+            Missed a block? It&apos;s moved forward automatically. Mark work as done on Courses and Syllabuddy learns how
+            long things really take you.
+          </p>
+        </HowItWorks>
+      </div>
 
       <DeadlineList today={today} />
     </main>

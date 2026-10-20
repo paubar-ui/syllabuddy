@@ -12,6 +12,7 @@ const data: BackupData = {
   gamification: initialGamification(),
   isDemo: true,
   focusMinutes: { b1: 25 },
+  displayName: "Paula",
 };
 
 describe("backup", () => {

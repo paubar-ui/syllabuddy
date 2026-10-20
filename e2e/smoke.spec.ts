@@ -256,3 +256,32 @@ test("a save that fails (network hiccup) is retried and nothing is lost", async 
   await page.reload();
   await expect(page.getByTestId("core-item").filter({ hasText: "Retry check essay" })).toBeVisible({ timeout: 15_000 });
 });
+
+test("daily briefing: greeting, summary, timeline, coming up — and / opens it for logged-in users", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await signUp(page, "briefing");
+  await page.getByTestId("demo-button").click();
+
+  const briefing = page.getByTestId("daily-briefing");
+  await expect(briefing).toBeVisible();
+  await expect(briefing.getByRole("heading", { level: 1 })).toHaveText(/^Good (morning|afternoon|evening)$/);
+  await expect(briefing).toContainText(/study blocks? today|No study blocks today/);
+  await expect(briefing).toContainText("Coming up · next 7 days");
+  await expect(briefing.getByTestId("today-list")).toBeVisible();
+  await expect(briefing.getByTestId("mascot-message")).toBeVisible();
+  await expect(page.getByTestId("core-input")).toBeVisible(); // the main feature stays on /app
+
+  // A first name personalises the greeting
+  await page.getByRole("link", { name: "Settings" }).filter({ visible: true }).first().click();
+  await page.getByLabel("First name or nickname").fill("Paula");
+  await page.getByRole("link", { name: "Today" }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId("daily-briefing").getByRole("heading", { level: 1 })).toHaveText(/, Paula$/);
+
+  // Returning users who open / go straight to their briefing; the landing page stays reachable
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto("/about");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("daily study plan");
+  await expect(page.getByRole("link", { name: "Open my plan" })).toBeVisible();
+  expect(errors).toEqual([]);
+});

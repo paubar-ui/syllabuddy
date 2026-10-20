@@ -62,6 +62,7 @@ const dataSchema = z.object({
   }),
   isDemo: z.boolean().default(false),
   focusMinutes: z.record(z.string(), z.number()).default({}),
+  displayName: z.string().max(40).default(""),
 });
 
 export type BackupData = z.infer<typeof dataSchema>;

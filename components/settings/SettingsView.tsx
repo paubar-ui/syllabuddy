@@ -40,8 +40,14 @@ function SettingsContent() {
       <PageHeader
         title="Settings"
         description="Make Syllabuddy fit your life: when you can study, how the coach talks to you, friends to compete with, and your data."
+        action={
+          <Link href="/about" className="text-sm font-medium text-muted underline underline-offset-2 hover:text-ink">
+            About Syllabuddy
+          </Link>
+        }
       />
       <div className="space-y-6">
+        <NameSettings />
         <AvailabilitySettings />
         <ToneSettings />
         <BuddiesCard />
@@ -223,6 +229,7 @@ function DataSettings() {
       gamification: s.gamification,
       isDemo: s.isDemo,
       focusMinutes: s.focusMinutes,
+      displayName: s.displayName,
     };
     download(`syllabuddy-backup-${todayISO()}.json`, createBackup(data, new Date()), "application/json");
     setStatus({ error: false, text: "Backup downloaded. Keep it somewhere safe." });
@@ -344,6 +351,34 @@ function BuddiesCard() {
       <Link href="/buddies" className={`${buttonSecondary} mt-3`}>
         Open study buddies
       </Link>
+    </section>
+  );
+}
+
+function NameSettings() {
+  const displayName = useStore((s) => s.displayName);
+  const setDisplayName = useStore((s) => s.setDisplayName);
+  return (
+    <section aria-labelledby="name-title" className={card}>
+      <h2 id="name-title" className="text-lg font-semibold tracking-tight">
+        What should we call you?
+      </h2>
+      <p className="text-sm text-muted">
+        Optional. Used only for the greeting on Today (“Good morning, …”). It stays private in your account.
+      </p>
+      <div className="mt-3 max-w-xs">
+        <label htmlFor="display-name-setting" className={label}>
+          First name or nickname
+        </label>
+        <input
+          id="display-name-setting"
+          className={input}
+          maxLength={40}
+          autoComplete="given-name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
+      </div>
     </section>
   );
 }

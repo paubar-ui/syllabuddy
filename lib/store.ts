@@ -47,6 +47,8 @@ export interface Data {
   timer: FocusTimer | null;
   /** The last time missed blocks were moved back into the plan (shown on Today). */
   lastReplan: { date: string; blocks: number; minutes: number } | null;
+  /** Optional first name for the briefing's greeting. */
+  displayName: string;
 }
 
 interface Actions {
@@ -79,6 +81,7 @@ interface Actions {
   /** Run once when the app opens: checks past days for a broken streak. */
   settleDays: (today?: string) => void;
   setMascotTone: (tone: Gamification["mascotTone"]) => void;
+  setDisplayName: (name: string) => void;
   reset: () => void;
 }
 
@@ -104,6 +107,7 @@ const DATA_KEYS = [
   "focusMinutes",
   "timer",
   "lastReplan",
+  "displayName",
 ] as const satisfies readonly (keyof Data)[];
 
 /** Just the data (no functions) — this is what gets saved to your account. */
@@ -123,6 +127,7 @@ const initialData = (): Data => ({
   focusMinutes: {},
   timer: null,
   lastReplan: null,
+  displayName: "",
 });
 
 export const useStore = create<SyllabuddyState>()(
@@ -322,6 +327,8 @@ export const useStore = create<SyllabuddyState>()(
 
         settleDays: (today = todayISO()) =>
           set((s) => ({ gamification: settleMissedDays(s.gamification, s.blocks, today) })),
+
+        setDisplayName: (name) => set({ displayName: name.slice(0, 40) }),
 
         setMascotTone: (mascotTone) =>
           set((s) => ({ gamification: { ...s.gamification, mascotTone } })),

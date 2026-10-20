@@ -121,6 +121,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="flex items-center gap-3 md:mt-auto md:flex-col md:items-stretch md:gap-2 md:border-t md:border-line md:px-2 md:pt-4">
+          <Link href="/about" className="hidden text-xs font-medium text-muted hover:text-ink md:block">
+            About Syllabuddy
+          </Link>
           {email && (
             <p className="hidden truncate text-xs text-muted md:block" title={email}>
               Signed in as
