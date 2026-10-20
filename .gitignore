@@ -44,3 +44,7 @@ next-env.d.ts
 
 # copied from pdfjs-dist on dev/build
 /public/pdf.worker.min.mjs
+
+# playwright
+/test-results/
+/playwright-report/

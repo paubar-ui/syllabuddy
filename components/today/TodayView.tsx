@@ -277,9 +277,7 @@ function TodayContent() {
             return (
               <li
                 key={block.id}
-                className={`flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm ${
-                  done ? "opacity-75" : ""
-                }`}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm"
                 style={{ borderLeft: `6px solid ${course?.color ?? "var(--accent)"}` }}
               >
                 <input
@@ -291,7 +289,7 @@ function TodayContent() {
                   className="h-6 w-6 shrink-0 cursor-pointer accent-[var(--success)]"
                 />
                 <label htmlFor={inputId} className="flex-1 cursor-pointer">
-                  <span className={`block font-semibold ${done ? "line-through" : ""}`}>
+                  <span className={`block font-semibold ${done ? "text-muted line-through" : ""}`}>
                     {d?.title ?? "Study block"}
                   </span>
                   <span className="block text-sm text-muted">

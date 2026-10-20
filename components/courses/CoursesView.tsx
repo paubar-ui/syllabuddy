@@ -90,10 +90,12 @@ function CoursesContent() {
       </section>
 
       <div className="mt-6 space-y-6">
-        {courses.map((course) => (
+        {courses.map((course, i) => (
           <CourseCard
             key={course.id}
             course={course}
+            // The first calculator gets the plain test id; ids must be unique on a page.
+            calculatorTestId={i === 0 ? "grade-calculator" : `grade-calculator-${course.id}`}
             items={deliverables
               .filter((d) => d.courseId === course.id)
               .sort((a, b) => a.dueDate.localeCompare(b.dueDate))}
@@ -104,7 +106,15 @@ function CoursesContent() {
   );
 }
 
-function CourseCard({ course, items }: { course: Course; items: Deliverable[] }) {
+function CourseCard({
+  course,
+  items,
+  calculatorTestId,
+}: {
+  course: Course;
+  items: Deliverable[];
+  calculatorTestId: string;
+}) {
   const updateCourse = useStore((s) => s.updateCourse);
   const generatePlan = useStore((s) => s.generatePlan);
   const setDeliverableDone = useStore((s) => s.setDeliverableDone);
@@ -161,7 +171,7 @@ function CourseCard({ course, items }: { course: Course; items: Deliverable[] })
                 className="mt-1 h-5 w-5 cursor-pointer accent-[var(--success)]"
               />
               <label htmlFor={doneId} className="cursor-pointer">
-                <span className={`block font-medium ${d.done ? "line-through opacity-75" : ""}`}>{d.title}</span>
+                <span className={`block font-medium ${d.done ? "text-muted line-through" : ""}`}>{d.title}</span>
                 <span className="block text-sm text-muted">
                   Due {format(parseISO(d.dueDate), "d MMM")} · {d.weight}% · {num(d.loggedMinutes / 60)}h of{" "}
                   {num(d.estimatedHours)}h logged
@@ -178,7 +188,7 @@ function CourseCard({ course, items }: { course: Course; items: Deliverable[] })
         {announcement}
       </p>
 
-      <GradeCalculator course={course} items={items} />
+      <GradeCalculator course={course} items={items} testId={calculatorTestId} />
     </section>
   );
 }
@@ -219,7 +229,7 @@ function ScoreInput({ deliverable, scale }: { deliverable: Deliverable; scale: n
   );
 }
 
-function GradeCalculator({ course, items }: { course: Course; items: Deliverable[] }) {
+function GradeCalculator({ course, items, testId }: { course: Course; items: Deliverable[]; testId: string }) {
   const updateCourse = useStore((s) => s.updateCourse);
   const [text, setText] = useState(course.targetGrade === undefined ? "" : String(course.targetGrade));
   const target = parseNumber(text);
@@ -262,7 +272,7 @@ function GradeCalculator({ course, items }: { course: Course; items: Deliverable
   };
 
   return (
-    <div data-testid="grade-calculator" className="mt-4 rounded-xl border border-line p-4">
+    <div data-testid={testId} className="mt-4 rounded-xl border border-line p-4">
       <h3 className="font-semibold">Grade calculator</h3>
       <div className="mt-2 max-w-48">
         <label htmlFor={id} className={label}>

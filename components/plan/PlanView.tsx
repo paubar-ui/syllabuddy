@@ -140,8 +140,9 @@ function PlanContent() {
               <li
                 key={day}
                 aria-current={isToday ? "date" : undefined}
-                className={`rounded-2xl border bg-surface p-3 ${isToday ? "border-accent border-2" : "border-line"} ${
-                  day < today ? "opacity-70" : ""
+                className={`rounded-2xl border p-3 ${isToday ? "border-accent border-2" : "border-line"} ${
+                  // Past days: a quieter background instead of fading the text (keeps it readable).
+                  day < today ? "border-dashed bg-bg" : "bg-surface"
                 }`}
               >
                 <h3 className="flex items-baseline justify-between gap-2 md:block">
