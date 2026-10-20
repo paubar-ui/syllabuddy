@@ -1,5 +1,6 @@
 // Blackboard calendar → class sessions per course (V2-3).
-// Groups timed class events by course, numbers them 1..N in date order, matches them to your
+// Groups timed class events by course, numbers them (Blackboard's own "(Ses. 10)" numbers when the
+// titles have them, else 1..N in date order), skips cancelled classes, matches them to your
 // Syllabuddy courses, turns "Session 15" into a real date and marks class hours as busy.
 import type { CalendarEvent } from "./calendarIcs";
 import type { CalendarCourse, CalendarSync, ClassSession, Course, Deliverable } from "./types";
@@ -13,8 +14,25 @@ export const RESYNC_HOURS = 6;
 // Deadlines and exams in the calendar are not class meetings.
 const NOT_A_CLASS =
   /\b(due|deadline|submission|submit|entrega|assignment|tarea|quiz|exam|examen|midterm|final|test|cuestionario|office hours|tutor[ií]a)\b/i;
+// "Marketing Session 2", "Finance - Lecture 4": a class word with its number at the end.
 const SESSION_WORDS =
-  /\s*[-–:#·|]?\s*\b(session|sesi[oó]n|class|clase|lecture|seminar|seminario|tutorial|lab|meeting|reuni[oó]n)\b\s*(#?\d+)?\s*$/i;
+  /\s*[-–:#·|]?\s*\b(session|sesi[oó]n|class|clase|lecture|seminar|seminario|tutorial|meeting|reuni[oó]n)\s*#?\d+\s*$/i;
+
+// "(Ses. 10)", "(Sesión 3)", "(Sessions 3-4)": session numbers written in the title.
+const SESSION_NUMBER =
+  /\(?\s*\b(?:ses\.?|sesi[oó]n(?:es)?|sessions?)\s*#?\s*(\d{1,2})(?:\s*(?:-|–|&|y|and|,)\s*(\d{1,2}))?\s*\)?/i;
+// How a class is given, written after the title (IE: "Live in-person", "Live online", "Asynchronous").
+const DELIVERY =
+  /\s*\b(?:live\s+(?:in-person|online)|asynchronous|as[ií]ncron[oa]|online|in-person|presencial|h[ií]brid[oa]|hybrid)\s*$/i;
+const ASYNC = /\b(asynchronous|as[ií]ncron[oa])\b/i;
+// "COURSE Extra Live in-person": an extra session outside the numbered ones.
+const EXTRA = /\s*\bextra\b\s*$/i;
+// After "COURSE:" these words mean the rest only describes the class ("Statistics: Class 3").
+const CLASS_WORDS = /^(?:session|sesi[oó]n|class|clase|lecture|seminar|seminario|tutorial|lab|meeting|reuni[oó]n)\b/i;
+// "## CANCELLED ##", "Cancelada", "Anulado": not a class.
+const CANCELLED = /\b(cancel+ed|cancelad[oa]|anulad[oa]|suspendid[oa])\b/i;
+// A group / section code at the end of the title, e.g. "T-20.", "S-A" or "SEC-A".
+const SECTION_CODE = /\s+(?:[A-Z]{1,4}-?\d{1,4}|[A-Z]{1,4}-[A-Z]{1,2}|SEC(?:TION)?[\s.-]*[A-Z0-9]{1,3})\.?$/;
 
 const SESSION_ONLY = /^\s*(session|sesi[oó]n|class|clase|lecture|seminar|seminario|week|semana)\s*#?\d*\s*$/i;
 
@@ -30,27 +48,48 @@ const normalize = (s: string) =>
 /** Which course an event belongs to: its category, else "COURSE: title", else the title itself. */
 export function courseNameOf(event: CalendarEvent): string {
   if (event.categories?.[0]) return event.categories[0];
-  const summary = event.summary.replace(/\s+/g, " ").trim();
+  const summary = event.summary
+    .replace(/\s+/g, " ")
+    .replace(SESSION_NUMBER, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(DELIVERY, "")
+    .replace(EXTRA, "")
+    .replace(SECTION_CODE, "")
+    .replace(/^[\s:–|·#-]+|[\s:–|·#-]+$/g, "");
   const parts = /^(.{2,80}?)\s*(?::|\s[-–|]\s)\s*(.+)$/.exec(summary);
   if (parts) {
     // "Session 3: Statistics" names the course after the colon; "Statistics: Session 3" before it.
+    // Otherwise the colon is part of the name ("ECONOMETRICS II: FORECASTING & IDENTIFICATION").
     const [, before, after] = parts;
-    return SESSION_ONLY.test(before) ? after.replace(SESSION_WORDS, "").trim() || after : before.trim();
+    if (SESSION_ONLY.test(before)) return after.replace(SESSION_WORDS, "").trim() || after;
+    if (CLASS_WORDS.test(after)) return before.trim();
   }
-  const stripped = summary
-    .replace(SESSION_WORDS, "")
-    .replace(/\s*#?\d+\s*$/, "")
-    .trim();
+  const stripped = summary.replace(SESSION_WORDS, "").trim();
   return stripped || summary;
 }
 
 export function isClassEvent(event: CalendarEvent): boolean {
   if (event.allDay) return false;
   const minutes = Math.round((new Date(`${event.end}:00`).getTime() - new Date(`${event.start}:00`).getTime()) / 60000);
-  return minutes >= 30 && minutes <= 300 && !NOT_A_CLASS.test(event.summary);
+  return minutes >= 30 && minutes <= 300 && !NOT_A_CLASS.test(event.summary) && !CANCELLED.test(event.summary);
 }
 
-/** Class sessions grouped per course and numbered 1..N by date and time. */
+/** Session numbers written in a title: "(Ses. 10)" → [10], "(Sessions 3-4)" → [3, 4]. */
+export function sessionNumbersOf(summary: string): number[] {
+  const m = SESSION_NUMBER.exec(summary);
+  if (!m) return [];
+  const from = Number(m[1]);
+  const to = m[2] ? Number(m[2]) : from;
+  if (from < 1 || to < from || to - from > 3) return [from];
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+}
+
+/**
+ * Class sessions grouped per course. When most titles carry Blackboard's own session numbers,
+ * those are used (classes without one still count as busy time, with number 0); otherwise
+ * classes are numbered 1..N by date and time.
+ */
 export function groupClassSessions(events: CalendarEvent[]): CalendarCourse[] {
   const groups = new Map<string, { name: string; events: CalendarEvent[] }>();
   for (const e of events) {
@@ -64,18 +103,31 @@ export function groupClassSessions(events: CalendarEvent[]): CalendarCourse[] {
   }
   return [...groups.entries()]
     .map(([key, g]) => {
+      const sorted = [...g.events].sort((a, b) => a.start.localeCompare(b.start));
+      const numbered = sorted.filter((e) => sessionNumbersOf(e.summary).length > 0).length;
+      const useOwnNumbers = numbered > 0 && numbered >= sorted.length / 2;
       const seen = new Set<string>();
       const sessions: ClassSession[] = [];
-      for (const e of [...g.events].sort((a, b) => a.start.localeCompare(b.start))) {
-        if (seen.has(e.start)) continue; // the same class listed twice
-        seen.add(e.start);
-        sessions.push({
-          number: sessions.length + 1,
-          date: e.start.slice(0, 10),
-          start: e.start.slice(11, 16),
-          end: e.end.slice(11, 16),
-        });
+      let count = 0;
+      for (const e of sorted) {
+        const extra = EXTRA.test(e.summary.replace(DELIVERY, "").trim());
+        const own = useOwnNumbers && !extra ? sessionNumbersOf(e.summary) : [];
+        const numbers = useOwnNumbers ? (own.length ? own : [0]) : [++count];
+        for (const number of numbers) {
+          const id = `${number}|${e.start}`;
+          if (seen.has(id) || (!useOwnNumbers && seen.has(`*|${e.start}`))) continue; // listed twice
+          seen.add(id);
+          seen.add(`*|${e.start}`);
+          sessions.push({
+            number,
+            date: e.start.slice(0, 10),
+            start: e.start.slice(11, 16),
+            end: e.end.slice(11, 16),
+            ...(ASYNC.test(e.summary) ? { async: true } : {}),
+          });
+        }
       }
+      if (!useOwnNumbers) sessions.forEach((s, i) => (s.number = i + 1)); // renumber after removing duplicates
       return { key, name: g.name, sessions };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -125,6 +177,11 @@ export function calendarCourseFor(sync: CalendarSync | null, courseId: string): 
   return sync.courses.find((c) => c.key === key);
 }
 
+/** How many class meetings (a double session is one meeting). */
+export function classCount(course: CalendarCourse): number {
+  return new Set(course.sessions.map((s) => `${s.date} ${s.start}`)).size;
+}
+
 /** Date of session N of a course in the calendar. */
 export function sessionDate(calendarCourse: CalendarCourse | undefined, n: number): string | undefined {
   return calendarCourse?.sessions.find((s) => s.number === n)?.date;
@@ -138,6 +195,7 @@ export function busyMinutesByDate(sync: CalendarSync | null, studyStart = STUDY_
   const busy: Record<string, [number, number][]> = {};
   for (const course of sync?.courses ?? []) {
     for (const s of course.sessions) {
+      if (s.async) continue; // nowhere to be: not busy time
       const from = Math.max(studyStart, minutesOf(s.start) - CLASS_BUFFER_MINUTES);
       const to = Math.min(24 * 60, minutesOf(s.end) + CLASS_BUFFER_MINUTES);
       if (to > from) (busy[s.date] ??= []).push([from, to]);
@@ -166,7 +224,7 @@ export function studyStartMinute(sync: CalendarSync | null, date: string): numbe
   let start = STUDY_START_MINUTE;
   for (const course of sync?.courses ?? []) {
     for (const s of course.sessions) {
-      if (s.date !== date) continue;
+      if (s.date !== date || s.async) continue;
       const end = minutesOf(s.end) + CLASS_BUFFER_MINUTES;
       if (end > start && minutesOf(s.start) - CLASS_BUFFER_MINUTES <= start) start = end;
     }

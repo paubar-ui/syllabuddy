@@ -110,6 +110,7 @@ export interface ClassSession {
   date: string; // ISO date
   start: string; // "10:00"
   end: string; // "11:30"
+  async?: boolean; // asynchronous session: has a number, but isn't busy time
 }
 
 /** A course as it appears in the Blackboard calendar. */

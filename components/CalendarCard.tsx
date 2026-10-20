@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Callout, HowItWorks } from "@/components/kit";
 import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
+import { classCount } from "@/lib/blackboard";
 import { resync, syncFromFile, syncFromUrl, type SyncResult } from "@/lib/calendarSync";
 import { useStore } from "@/lib/store";
 
@@ -123,47 +124,62 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
                 </tr>
               </thead>
               <tbody>
-                {calendar.courses.map((cc) => {
-                  const id = `map-${cc.key.replace(/[^a-z0-9]+/g, "-")}`;
-                  const first = cc.sessions[0];
-                  return (
-                    <tr key={cc.key} className="border-b border-line align-top">
-                      <th scope="row" className="py-2 pr-3 font-medium">
-                        {cc.name}
-                      </th>
-                      <td className="py-2 pr-3 text-muted">
-                        {cc.sessions.length}
-                        {first && (
-                          <span className="block text-xs">
-                            from {format(parseISO(first.date), "d MMM")} · {first.start}–{first.end}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2">
-                        <label htmlFor={id} className="sr-only">
-                          Syllabuddy course for {cc.name}
-                        </label>
-                        <select
-                          id={id}
-                          className={input}
-                          value={calendar.mapping[cc.key] ?? ""}
-                          onChange={(e) => setCalendarMapping(cc.key, e.target.value)}
-                        >
-                          <option value="">Not one of my courses</option>
-                          {courses.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {calendar.courses
+                  .filter((cc) => classCount(cc) > 1)
+                  .map((cc) => {
+                    const id = `map-${cc.key.replace(/[^a-z0-9]+/g, "-")}`;
+                    const first = cc.sessions[0];
+                    return (
+                      <tr key={cc.key} className="border-b border-line align-top">
+                        <th scope="row" className="py-2 pr-3 font-medium">
+                          {cc.name}
+                        </th>
+                        <td className="py-2 pr-3 text-muted">
+                          {classCount(cc)}
+                          {first && (
+                            <span className="block text-xs">
+                              from {format(parseISO(first.date), "d MMM")} · {first.start}–{first.end}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2">
+                          <label htmlFor={id} className="sr-only">
+                            Syllabuddy course for {cc.name}
+                          </label>
+                          <select
+                            id={id}
+                            className={input}
+                            value={calendar.mapping[cc.key] ?? ""}
+                            onChange={(e) => setCalendarMapping(cc.key, e.target.value)}
+                          >
+                            <option value="">Not one of my courses</option>
+                            {courses.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
 
+          {(() => {
+            const oneOffs = calendar.courses.filter((cc) => classCount(cc) <= 1);
+            return oneOffs.length > 0 ? (
+              <p className="mt-2 text-xs text-muted">
+                Also {oneOffs.length} one-off event{oneOffs.length === 1 ? "" : "s"} (like{" "}
+                {oneOffs
+                  .slice(0, 2)
+                  .map((cc) => `“${cc.name}”`)
+                  .join(", ")}
+                ) — not courses, but their time still counts as busy.
+              </p>
+            ) : null;
+          })()}
           <div className="mt-3 flex flex-wrap gap-2">
             {calendar.url && (
               <button type="button" disabled={busy} onClick={() => run(resync)} className={buttonPrimary}>

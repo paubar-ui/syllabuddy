@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { guessMapping } from "@/lib/blackboard";
+import { classCount, guessMapping } from "@/lib/blackboard";
 import { todayISO } from "@/lib/dates";
 import {
   applyCalendarToDrafts,
@@ -20,12 +20,7 @@ import {
   type DraftItem,
   type DraftProblem,
 } from "@/lib/draft";
-import {
-  DELIVERABLE_TYPES,
-  MAX_TEXT_CHARS,
-  normalizeExtraction,
-  type ExtractedSyllabus,
-} from "@/lib/extraction";
+import { DELIVERABLE_TYPES, MAX_TEXT_CHARS, normalizeExtraction, type ExtractedSyllabus } from "@/lib/extraction";
 import { parseSessions } from "@/lib/parseSessions";
 import { parseSyllabus } from "@/lib/parseSyllabus";
 import { extractPdfText } from "@/lib/pdf";
@@ -91,10 +86,7 @@ export function OnboardingWizard() {
           const n = i + 1;
           return (
             <li key={name} aria-current={n === step ? "step" : undefined} className="text-xs sm:text-sm">
-              <span
-                className={`block h-1.5 rounded-full ${n <= step ? "bg-accent" : "bg-line"}`}
-                aria-hidden="true"
-              />
+              <span className={`block h-1.5 rounded-full ${n <= step ? "bg-accent" : "bg-line"}`} aria-hidden="true" />
               <span className={`mt-1 block ${n === step ? "font-semibold text-ink" : "text-muted"}`}>
                 <span className="sr-only">Step {n}: </span>
                 {name}
@@ -332,7 +324,9 @@ function StepSyllabus({
             className={`${input} min-h-56 font-mono text-sm`}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={"Paste here, for example:\nMidterm exam – 30% – 12/11/2026\nGroup project (25%) due Dec 3\nFinal exam 45% – 20 de enero"}
+            placeholder={
+              "Paste here, for example:\nMidterm exam – 30% – 12/11/2026\nGroup project (25%) due Dec 3\nFinal exam 45% – 20 de enero"
+            }
           />
         </div>
 
@@ -341,7 +335,13 @@ function StepSyllabus({
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <button type="button" data-testid="extract-button" onClick={extract} disabled={busy} className={buttonPrimary}>
+          <button
+            type="button"
+            data-testid="extract-button"
+            onClick={extract}
+            disabled={busy}
+            className={buttonPrimary}
+          >
             {busy ? "Working…" : "Find deliverables"}
           </button>
           <button type="button" onClick={onManual} disabled={busy} className={buttonSecondary}>
@@ -489,11 +489,13 @@ function StepReview({
                     }
                   >
                     <option value="">Not in Blackboard</option>
-                    {calendar.courses.map((cc) => (
-                      <option key={cc.key} value={cc.key}>
-                        {cc.name} ({cc.sessions.length} classes)
-                      </option>
-                    ))}
+                    {calendar.courses
+                      .filter((cc) => classCount(cc) > 1 || cc.key === course.calendarKey)
+                      .map((cc) => (
+                        <option key={cc.key} value={cc.key}>
+                          {cc.name} ({classCount(cc)} classes)
+                        </option>
+                      ))}
                   </select>
                   <p className="mt-1 text-xs text-muted">Used to turn “Session 15” into the date of that class.</p>
                 </div>
@@ -508,7 +510,8 @@ function StepReview({
               <div className="mt-4 grid gap-4 rounded-lg bg-surface-2 p-3 sm:grid-cols-[1fr_10rem]">
                 <div>
                   <label htmlFor={`effort-${course.id}`} className={label}>
-                    How hard is this course for you? <span className="font-semibold">{EFFORT_LABELS[course.effort]}</span>
+                    How hard is this course for you?{" "}
+                    <span className="font-semibold">{EFFORT_LABELS[course.effort]}</span>
                   </label>
                   <input
                     id={`effort-${course.id}`}
@@ -620,9 +623,7 @@ function StepReview({
                       <button
                         type="button"
                         aria-label={`Remove ${rowLabel}`}
-                        onClick={() =>
-                          updateCourse(course.id, { items: course.items.filter((i) => i.id !== item.id) })
-                        }
+                        onClick={() => updateCourse(course.id, { items: course.items.filter((i) => i.id !== item.id) })}
                         className="self-end justify-self-end rounded-full px-3 py-2 text-sm font-medium text-muted hover:bg-accent-soft hover:text-ink"
                       >
                         Remove
@@ -648,10 +649,7 @@ function StepReview({
                 })}
               </ul>
 
-              <SessionTable
-                sessions={course.sessions}
-                onChange={(sessions) => updateCourse(course.id, { sessions })}
-              />
+              <SessionTable sessions={course.sessions} onChange={(sessions) => updateCourse(course.id, { sessions })} />
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <button
@@ -690,7 +688,12 @@ function StepReview({
         >
           + Add a course by hand
         </button>
-        <button type="button" data-testid="save-courses-button" onClick={save} className={`${buttonPrimary} sm:ml-auto`}>
+        <button
+          type="button"
+          data-testid="save-courses-button"
+          onClick={save}
+          className={`${buttonPrimary} sm:ml-auto`}
+        >
           Next: your free time
         </button>
       </div>
@@ -790,16 +793,24 @@ function SessionTable({
       </summary>
       <div className="overflow-x-auto px-3 pb-3">
         <p className="text-xs text-muted">
-          Used to plan exam prep topic by topic. Fix a topic or its key concepts (separated by commas) if something looks
-          off.
+          Used to plan exam prep topic by topic. Fix a topic or its key concepts (separated by commas) if something
+          looks off.
         </p>
         <table className="mt-2 w-full text-left text-sm">
           <thead className="text-xs text-muted">
             <tr>
-              <th scope="col" className="py-1 pr-2 font-medium">#</th>
-              <th scope="col" className="py-1 pr-2 font-medium">Topic</th>
-              <th scope="col" className="py-1 pr-2 font-medium">Key concepts</th>
-              <th scope="col" className="py-1 font-medium">Reading / problem sets</th>
+              <th scope="col" className="py-1 pr-2 font-medium">
+                #
+              </th>
+              <th scope="col" className="py-1 pr-2 font-medium">
+                Topic
+              </th>
+              <th scope="col" className="py-1 pr-2 font-medium">
+                Key concepts
+              </th>
+              <th scope="col" className="py-1 font-medium">
+                Reading / problem sets
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -822,7 +833,10 @@ function SessionTable({
                     // Split into concepts when you leave the field, so typing a comma works normally.
                     onBlur={(e) =>
                       update(s.number, {
-                        concepts: e.target.value.split(",").map((c) => c.trim()).filter(Boolean),
+                        concepts: e.target.value
+                          .split(",")
+                          .map((c) => c.trim())
+                          .filter(Boolean),
                       })
                     }
                   />

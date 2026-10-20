@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyCalendar,
   busyMinutesByDate,
+  classCount,
   courseNameOf,
   groupClassSessions,
   guessMapping,
   needsResync,
   normalizeCalendarUrl,
   sessionDate,
+  sessionNumbersOf,
   studyStartMinute,
 } from "./blackboard";
 import { parseIcs } from "./calendarIcs";
@@ -154,5 +156,87 @@ describe("links", () => {
     expect(needsResync({ ...sync, url: "https://x.edu/a.ics", lastSync: "2026-10-20T07:00:00Z" }, now)).toBe(false);
     expect(needsResync({ ...sync, url: "https://x.edu/a.ics", lastSync: "2026-10-20T05:59:00Z" }, now)).toBe(true);
     expect(needsResync({ ...sync, fileName: "cal.ics" }, now)).toBe(false);
+  });
+});
+
+describe("IE-style Blackboard titles: “COURSE (Ses. 10) T-20.”", () => {
+  const ev = (summary: string, start: string, end: string) => ({
+    uid: `${summary}${start}`,
+    summary,
+    start,
+    end,
+    allDay: false,
+  });
+  const ieEvents = [
+    ev("MICROECONOMICS, MARKETS & POLICY (Ses. 1) T-20.", "2026-09-07T17:00", "2026-09-07T18:20"),
+    ev("MICROECONOMICS, MARKETS & POLICY (Ses. 2) T-20.", "2026-09-08T16:30", "2026-09-08T17:50"),
+    ev("MICROECONOMICS, MARKETS & POLICY (Ses. 3-4) T-20.", "2026-09-10T16:30", "2026-09-10T19:20"),
+    ev("MICROECONOMICS, MARKETS & POLICY (Ses. 10) T-20.", "2026-09-29T18:00", "2026-09-29T19:20"),
+    ev("MICROECONOMICS, MARKETS & POLICY", "2026-10-05T16:30", "2026-10-05T19:20"),
+    ev("## CANCELLED ## MICROECONOMICS, MARKETS & POLICY (Ses. 11) T-20.", "2026-10-01T16:30", "2026-10-01T17:50"),
+    ev("## CANCELLED ## WORLD HISTORY", "2026-09-10T16:30", "2026-09-10T19:20"),
+    ev("Derecho Mercantil (Sesión 2) S-A", "2026-09-09T09:00", "2026-09-09T10:20"),
+    ev("Derecho Mercantil (Sesión 1) S-A", "2026-09-02T09:00", "2026-09-02T10:20"),
+  ];
+  const grouped = groupClassSessions(ieEvents);
+
+  it("groups every class of a course together and skips cancelled ones", () => {
+    expect(grouped.map((c) => c.name)).toEqual(["Derecho Mercantil", "MICROECONOMICS, MARKETS & POLICY"]);
+    expect(courseNameOf(ieEvents[0])).toBe("MICROECONOMICS, MARKETS & POLICY");
+  });
+
+  it("uses Blackboard's own session numbers, including double sessions", () => {
+    const micro = grouped[1];
+    expect(micro.sessions.map((s) => s.number)).toEqual([1, 2, 3, 4, 10, 0]);
+    expect(sessionDate(micro, 4)).toBe("2026-09-10");
+    expect(sessionDate(micro, 10)).toBe("2026-09-29");
+    expect(sessionDate(micro, 11)).toBeUndefined(); // cancelled
+    expect(classCount(micro)).toBe(5);
+    expect(sessionDate(grouped[0], 1)).toBe("2026-09-02");
+  });
+
+  it("reads session numbers from titles", () => {
+    expect(sessionNumbersOf("X (Ses. 10) T-20.")).toEqual([10]);
+    expect(sessionNumbersOf("X (Sessions 3-4)")).toEqual([3, 4]);
+    expect(sessionNumbersOf("Y (Sesión 7)")).toEqual([7]);
+    expect(sessionNumbersOf("Statistics: Class")).toEqual([]);
+  });
+});
+
+describe("IE delivery tags: “Live in-person”, “Asynchronous”, “Extra”", () => {
+  const ev = (summary: string, start: string, end: string) => ({
+    uid: `${summary}${start}`,
+    summary,
+    start,
+    end,
+    allDay: false,
+  });
+  const grouped = groupClassSessions([
+    ev(
+      "ECONOMETRICS II: FORECASTING & IDENTIFICATION  (Ses. 1) Live in-person ",
+      "2026-09-07T10:00",
+      "2026-09-07T11:20",
+    ),
+    ev("ECONOMETRICS II: FORECASTING & IDENTIFICATION  (Ses. 2) Asynchronous ", "2026-09-09T19:00", "2026-09-09T20:20"),
+    ev("ECONOMETRICS II: FORECASTING & IDENTIFICATION Extra Live in-person ", "2026-09-11T19:00", "2026-09-11T20:20"),
+    ev("ECONOMIC REPORTING LAB  (Ses. 1-2) Live online ", "2026-09-08T10:00", "2026-09-08T12:50"),
+    ev("GERMAN BEGINNER 1  (Ses. 3) Live online ", "2026-09-08T13:00", "2026-09-08T14:20"),
+  ]);
+
+  it("keeps full course names and drops the delivery tags", () => {
+    expect(grouped.map((c) => c.name)).toEqual([
+      "ECONOMETRICS II: FORECASTING & IDENTIFICATION",
+      "ECONOMIC REPORTING LAB",
+      "GERMAN BEGINNER 1",
+    ]);
+  });
+
+  it("extra sessions are unnumbered; asynchronous ones keep their number but aren't busy time", () => {
+    const eco = grouped[0];
+    expect(eco.sessions.map((s) => s.number)).toEqual([1, 2, 0]);
+    expect(sessionDate(eco, 2)).toBe("2026-09-09");
+    const busy = busyMinutesByDate({ courses: grouped, mapping: {} });
+    expect(busy["2026-09-09"]).toBeUndefined(); // asynchronous evening session
+    expect(busy["2026-09-11"]).toBe(110); // extra session 19:00–20:20 → busy 18:45–20:35
   });
 });

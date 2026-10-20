@@ -1,7 +1,7 @@
 "use client";
 // Reading the Blackboard calendar from the browser (V2-3): a share link goes through our
 // /api/calendar route (with your login token); an uploaded .ics file is read right here.
-import { groupClassSessions, normalizeCalendarUrl } from "./blackboard";
+import { classCount, groupClassSessions, normalizeCalendarUrl } from "./blackboard";
 import { parseIcs } from "./calendarIcs";
 import { useStore } from "./store";
 import { getSupabase } from "./supabase";
@@ -19,7 +19,7 @@ function save(text: string, source: { url?: string; fileName?: string }): SyncRe
     };
   }
   useStore.getState().setCalendar({ ...source, lastSync: new Date().toISOString(), courses });
-  return { ok: true, courses: courses.length, sessions: courses.reduce((n, c) => n + c.sessions.length, 0) };
+  return { ok: true, courses: courses.length, sessions: courses.reduce((n, c) => n + classCount(c), 0) };
 }
 
 export async function syncFromUrl(input: string): Promise<SyncResult> {
