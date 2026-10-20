@@ -49,6 +49,12 @@ function BuddiesContent() {
   const [auth, setAuth] = useState<AuthState>(() =>
     buddiesConfigured ? { status: "loading" } : { status: "signedOut" },
   );
+  // A login link that failed comes back as #error=…&error_code=otp_expired in the URL.
+  const [linkError] = useState(() => loginLinkError(window.location.hash));
+
+  useEffect(() => {
+    if (linkError) window.history.replaceState(null, "", window.location.pathname);
+  }, [linkError]);
 
   useEffect(() => {
     const sb = getSupabase();
@@ -70,7 +76,7 @@ function BuddiesContent() {
         Compete with friends on points, streaks and hours. They never see your courses, grades or syllabi.
       </p>
       {auth.status === "loading" && <p className="mt-6 text-muted">Checking your login…</p>}
-      {auth.status === "signedOut" && <SignedOut />}
+      {auth.status === "signedOut" && <SignedOut linkError={linkError} />}
       {auth.status === "signedIn" && <SignedIn session={auth.session} />}
     </main>
   );
@@ -80,10 +86,19 @@ function BuddiesContent() {
 // Not logged in: demo leaderboard + login
 // ---------------------------------------------------------------------------
 
-function SignedOut() {
+/** Turns Supabase's error in the URL hash into a friendly sentence (or null if there's none). */
+function loginLinkError(hash: string): string | null {
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  if (!params.get("error")) return null;
+  return params.get("error_code") === "otp_expired"
+    ? "That login link has expired or was already used. Links work once, for one hour, and only the newest email counts — request a new one below."
+    : "That login link didn't work. Please request a new one below.";
+}
+
+function SignedOut({ linkError }: { linkError: string | null }) {
   const gamification = useStore((s) => s.gamification);
   const [today] = useState(todayISO);
-  const [showLogin, setShowLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(Boolean(linkError));
   const mine = weeklyStats(gamification, today);
   const ranked = rankLeaderboard([
     { id: "me", name: "You", ...mine, isMe: true },
@@ -114,6 +129,11 @@ function SignedOut() {
         <p className="mt-1 text-sm text-muted">
           Logging in is only needed here. Everything else in Syllabuddy works without an account.
         </p>
+        {linkError && (
+          <p role="alert" className="mt-3 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn-ink">
+            {linkError}
+          </p>
+        )}
         {!showLogin ? (
           <button type="button" onClick={() => setShowLogin(true)} className={`${buttonPrimary} mt-3`}>
             Log in to add real friends
