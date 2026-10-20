@@ -1,12 +1,13 @@
 "use client";
-// /settings: Tick's tone, weekly availability and days off, export/import of your data, reset.
+// /settings: coach tone, weekly availability and days off, study buddies, export/import of your data, reset.
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AvailabilityFields } from "@/components/AvailabilityFields";
+import { PageHeader } from "@/components/kit";
 import { Tick } from "@/components/Tick";
-import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
+import { buttonPrimary, buttonSecondary, card, input, label, page } from "@/components/ui";
 import { availabilityFromForm, formFromAvailability } from "@/lib/availability";
 import { createBackup, parseBackup, type BackupData } from "@/lib/backup";
 import { todayISO } from "@/lib/dates";
@@ -24,8 +25,8 @@ export function SettingsView() {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10" aria-busy="true">
-        <h1 className="text-2xl font-bold">Settings</h1>
+      <main id="main" className={page} aria-busy="true">
+        <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-2 text-muted">Loading…</p>
       </main>
     );
@@ -35,14 +36,15 @@ export function SettingsView() {
 
 function SettingsContent() {
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/app" className={`${buttonLink} text-sm`}>
-        ← Back to today
-      </Link>
-      <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Settings</h1>
-      <div className="mt-6 space-y-6">
-        <ToneSettings />
+    <main id="main" className={page}>
+      <PageHeader
+        title="Settings"
+        description="Make Syllabuddy fit your life: when you can study, how the coach talks to you, friends to compete with, and your data."
+      />
+      <div className="space-y-6">
         <AvailabilitySettings />
+        <ToneSettings />
+        <BuddiesCard />
         <DataSettings />
       </div>
     </main>
@@ -55,17 +57,18 @@ function ToneSettings() {
 
   return (
     <section aria-labelledby="tone-title" className={card}>
-      <h2 id="tone-title" className="text-lg font-semibold">
-        Tick&apos;s tone
+      <h2 id="tone-title" className="text-lg font-semibold tracking-tight">
+        Coach tone
       </h2>
+      <p className="text-sm text-muted">How the one-line coach message on Today talks to you. You can change it any time.</p>
       <fieldset className="mt-3">
         <legend className="sr-only">How should Tick talk to you?</legend>
         <div className="grid gap-3 sm:grid-cols-3">
           {TONES.map((t) => (
             <label
               key={t.value}
-              className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${
-                tone === t.value ? "border-accent bg-accent-soft" : "border-line"
+              className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
+                tone === t.value ? "border-accent bg-accent-soft" : "border-line hover:bg-surface-2"
               }`}
             >
               <input
@@ -84,10 +87,10 @@ function ToneSettings() {
           ))}
         </div>
       </fieldset>
-      <div className="mt-4 flex items-start gap-3">
-        <Tick size={44} className="shrink-0" />
-        <p className="rounded-2xl rounded-tl-sm border border-line px-3 py-2 text-sm" aria-live="polite">
-          <span className="sr-only">Example: </span>
+      <div className="mt-4 flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft px-4 py-3">
+        <Tick size={22} className="mt-0.5 shrink-0" />
+        <p className="text-sm" aria-live="polite">
+          <span className="font-semibold">Example · </span>
           {getMascotMessage(tone, "morningPlan", { minutes: 90, count: 2 }, "settings-preview")}
         </p>
       </div>
@@ -122,9 +125,13 @@ function AvailabilitySettings() {
 
   return (
     <section aria-labelledby="availability-title" className={card}>
-      <h2 id="availability-title" className="text-lg font-semibold">
+      <h2 id="availability-title" className="text-lg font-semibold tracking-tight">
         When you can study
       </h2>
+      <p className="text-sm text-muted">
+        Roughly how many hours you have for studying on each day of a normal week. Your plan never puts more than this on a
+        day — so be realistic, and leave room for classes, work and rest.
+      </p>
       <div className="mt-3">
         <AvailabilityFields value={form} onChange={setForm} />
       </div>
@@ -135,13 +142,13 @@ function AvailabilitySettings() {
         <ul className="mt-2 flex flex-wrap gap-2">
           {upcomingDaysOff.length === 0 && <li className="text-sm text-muted">No days off planned.</li>}
           {upcomingDaysOff.map((d) => (
-            <li key={d} className="flex items-center gap-1 rounded-full bg-accent-soft py-1 pl-3 pr-1 text-sm">
+            <li key={d} className="flex items-center gap-1 rounded-md border border-accent-line bg-accent-soft py-1 pl-3 pr-1 text-sm">
               {format(parseISO(d), "EEE d MMM")}
               <button
                 type="button"
                 aria-label={`Remove day off ${format(parseISO(d), "EEEE d MMMM")}`}
                 onClick={() => setDaysOff((all) => all.filter((x) => x !== d))}
-                className="rounded-full px-2 hover:bg-surface"
+                className="rounded px-2 hover:bg-surface"
               >
                 ×
               </button>
@@ -235,7 +242,7 @@ function DataSettings() {
 
   return (
     <section aria-labelledby="data-title" className={card}>
-      <h2 id="data-title" className="text-lg font-semibold">
+      <h2 id="data-title" className="text-lg font-semibold tracking-tight">
         Your data
       </h2>
       <p className="mt-1 text-sm text-muted">
@@ -258,7 +265,7 @@ function DataSettings() {
           type="file"
           accept=".json,application/json"
           onChange={(e) => onFile(e.target.files?.[0])}
-          className="block w-full text-sm text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent-soft file:px-4 file:py-2 file:font-semibold file:text-ink"
+          className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent-soft file:px-4 file:py-2 file:font-semibold file:text-ink"
         />
       </div>
       {pending && (
@@ -305,7 +312,7 @@ function DataSettings() {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full bg-danger px-5 py-2.5 font-semibold text-surface"
+                className="inline-flex items-center justify-center rounded-lg bg-danger px-4 py-2.5 text-sm font-semibold text-surface"
                 onClick={() => {
                   useStore.getState().reset();
                   router.push("/app");
@@ -320,6 +327,23 @@ function DataSettings() {
           </div>
         )}
       </div>
+    </section>
+  );
+}
+
+function BuddiesCard() {
+  return (
+    <section aria-labelledby="buddies-title" className={card}>
+      <h2 id="buddies-title" className="text-lg font-semibold tracking-tight">
+        Study buddies
+      </h2>
+      <p className="text-sm text-muted">
+        Compete with friends on a weekly leaderboard. They only see your display name, points, streak and study hours —
+        never your deadlines, courses or grades.
+      </p>
+      <Link href="/buddies" className={`${buttonSecondary} mt-3`}>
+        Open study buddies
+      </Link>
     </section>
   );
 }

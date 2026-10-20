@@ -3,26 +3,26 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { DemoButton } from "@/components/DemoButton";
-import { MascotBubble, Tick } from "@/components/Tick";
-import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
+import { Callout, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
+import { MascotBubble } from "@/components/Tick";
+import { buttonPrimary, card, input, label, page } from "@/components/ui";
 import { todayISO } from "@/lib/dates";
 import { triage, type TriageLabel } from "@/lib/panic";
 import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/useHydrated";
 
 const BADGE: Record<TriageLabel, { text: string; className: string }> = {
-  full: { text: "Do fully", className: "bg-success-soft text-success" },
-  "minimum viable": { text: "Minimum viable", className: "bg-warn-bg text-warn-ink" },
-  skip: { text: "Skip for now", className: "bg-line text-ink" },
+  full: { text: "Do fully", className: "border-success-line bg-success-soft text-success" },
+  "minimum viable": { text: "Minimum viable", className: "border-warn-line bg-warn-bg text-warn-ink" },
+  skip: { text: "Skip for now", className: "border-line bg-surface-2 text-ink" },
 };
 
 export function PanicView() {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10" aria-busy="true">
-        <h1 className="text-2xl font-bold">Panic mode</h1>
+      <main id="main" className={page} aria-busy="true">
+        <h1 className="text-2xl font-semibold">Panic mode</h1>
         <p className="mt-2 text-muted">Loading…</p>
       </main>
     );
@@ -40,16 +40,18 @@ function PanicContent() {
 
   if (courses.length === 0) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 pb-28 text-center md:pb-10">
-        <Tick size={96} className="mx-auto" />
-        <h1 className="mt-4 text-2xl font-bold">Panic mode</h1>
-        <p className="mt-2 text-muted">Add your courses first — or try the demo to see how triage works.</p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <DemoButton />
-          <Link href="/onboarding" className={buttonSecondary}>
-            Start with my syllabi
-          </Link>
-        </div>
+      <main id="main" className={page}>
+        <PageHeader back={{ href: "/app", label: "Today" }} title="Panic mode" />
+        <EmptyState
+          title="Nothing to triage yet"
+          action={
+            <Link href="/app" className={buttonPrimary}>
+              Add a deadline
+            </Link>
+          }
+        >
+          Panic mode sorts out what&apos;s due in the next few days. Add your deadlines first.
+        </EmptyState>
       </main>
     );
   }
@@ -65,17 +67,23 @@ function PanicContent() {
   });
 
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/app" className={`${buttonLink} text-sm`}>
-        ← Back to today
-      </Link>
-      <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Panic mode</h1>
+    <main id="main" className={page}>
+      <PageHeader
+        back={{ href: "/app", label: "Today" }}
+        title="Panic mode"
+        description="Too much due and not enough time? Tell us how many hours you really have, and we'll sort your deadlines into what to finish, what to do quickly, and what can wait."
+      />
+      <Callout tone="danger" title="Take a breath first">
+        Panicking costs more time than it saves. Fill in the two boxes below, then follow the list from top to bottom —
+        one thing at a time.
+      </Callout>
       <div className="mt-4">
         <MascotBubble message="Okay. Breathe in, breathe out. We'll do the most valuable things first — one at a time." />
       </div>
 
       <form
         className={`${card} mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end`}
+        aria-describedby="panic-help"
         onSubmit={(e) => {
           e.preventDefault();
           resultRef.current?.focus();
@@ -137,7 +145,7 @@ function PanicContent() {
         </h2>
         {result.items.length === 0 ? (
           <p className={`${card} mt-3`}>
-            Nothing is due in the next {windowHours} hours. 🎉 You&apos;re not behind — maybe you&apos;re just tired.
+            Nothing is due in the next {windowHours} hours. You&apos;re not behind — maybe you&apos;re just tired.
             A short walk or an early night might help more than studying.
           </p>
         ) : (
@@ -158,7 +166,7 @@ function PanicContent() {
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold">{item.title}</h3>
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE[item.label].className}`}>
+                      <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${BADGE[item.label].className}`}>
                         {BADGE[item.label].text}
                         {item.hours > 0 && ` · ${item.hours}h`}
                       </span>
@@ -178,6 +186,20 @@ function PanicContent() {
           </>
         )}
       </section>
+
+      <div id="panic-help" className="mt-6">
+        <HowItWorks title="How the triage works">
+          <p>
+            We look at everything due in the window you chose and rank it by <span className="font-medium">grade points
+            per hour</span>: how much of your grade it&apos;s worth, divided by the hours it still needs.
+          </p>
+          <p>
+            Your hours go to the best-value work first. <span className="font-medium">Do fully</span> means there&apos;s
+            time to finish it properly; <span className="font-medium">Minimum viable</span> means do the essentials (we
+            say which); <span className="font-medium">Skip for now</span> means let it go or ask for an extension.
+          </p>
+        </HowItWorks>
+      </div>
     </main>
   );
 }

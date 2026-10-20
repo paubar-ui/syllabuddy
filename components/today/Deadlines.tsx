@@ -4,7 +4,8 @@
 import { format, parseISO } from "date-fns";
 import { useState } from "react";
 import { create } from "zustand";
-import { buttonPrimary, card, input, label } from "@/components/ui";
+import { EmptyState, SectionHeader } from "@/components/kit";
+import { buttonPrimary, input, label } from "@/components/ui";
 import { addDaysISO, daysBetween, describeDaysAway } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { flushPlan } from "@/lib/planSync";
@@ -54,10 +55,17 @@ export function AddDeadline({ today }: { today: string }) {
   }
 
   return (
-    <section aria-labelledby="add-title" className={`${card} mt-6`}>
-      <h2 id="add-title" className="text-lg font-semibold">
+    <section
+      aria-labelledby="add-title"
+      className="rounded-xl border border-accent-line bg-surface p-4 shadow-sm sm:p-5"
+    >
+      <h2 id="add-title" className="text-lg font-semibold tracking-tight">
         Add a deadline
       </h2>
+      <p className="text-sm text-muted">
+        Type what&apos;s due and press <span className="font-medium text-ink">Add deadline</span> — that&apos;s all. We
+        recognise the type from the title (exam, essay, quiz…) and plan the study time for you.
+      </p>
       <form onSubmit={onSubmit} className="mt-3">
         <label htmlFor="core-input" className={label}>
           What&apos;s due?
@@ -80,7 +88,9 @@ export function AddDeadline({ today }: { today: string }) {
         </div>
 
         <details className="mt-3 text-sm">
-          <summary className="cursor-pointer font-medium text-accent">More options (date, course, weight)</summary>
+          <summary className="cursor-pointer font-medium text-accent">
+            More options (date, course, weight) — optional
+          </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <div>
               <label htmlFor="deadline-date" className={label}>
@@ -151,6 +161,7 @@ export function DeadlineList({ today }: { today: string }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const savingIds = useSaving((s) => s.ids);
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
+  const courseColor = new Map(courses.map((c) => [c.id, c.color]));
 
   const items = deliverables
     .filter((d) => !savingIds.includes(d.id))
@@ -158,13 +169,15 @@ export function DeadlineList({ today }: { today: string }) {
 
   return (
     <section aria-labelledby="deadlines-title" className="mt-8">
-      <h2 id="deadlines-title" className="text-lg font-semibold">
-        Your deadlines
-      </h2>
+      <SectionHeader
+        id="deadlines-title"
+        title="Your deadlines"
+        hint="Everything you've added, soonest first. Your plan is rebuilt automatically when you add or delete one."
+      />
       {items.length === 0 ? (
-        <p className="mt-2 text-muted">No deadlines yet — add your first one above.</p>
+        <EmptyState title="No deadlines yet">Add your first one in the box above — it takes five seconds.</EmptyState>
       ) : (
-        <ul className="mt-3 space-y-2">
+        <ul className="space-y-2">
           {items.map((d) => {
             const days = daysBetween(today, d.dueDate);
             const soon = !d.done && days >= 0 && days <= 3;
@@ -173,6 +186,7 @@ export function DeadlineList({ today }: { today: string }) {
                 key={d.id}
                 data-testid="core-item"
                 className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3"
+                style={{ borderLeft: `4px solid ${courseColor.get(d.courseId) ?? "var(--line)"}` }}
               >
                 <span className="min-w-0">
                   <span className={`block font-medium break-words ${d.done ? "text-muted line-through" : ""}`}>
@@ -186,8 +200,10 @@ export function DeadlineList({ today }: { today: string }) {
                 <span className="flex shrink-0 items-center gap-2">
                   {soon && (
                     <span
-                      className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                        days <= 1 ? "bg-danger-soft text-danger" : "bg-warn-bg text-warn-ink"
+                      className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                        days <= 1
+                          ? "border-danger-line bg-danger-soft text-danger"
+                          : "border-warn-line bg-warn-bg text-warn-ink"
                       }`}
                     >
                       Due {describeDaysAway(days)}
@@ -201,7 +217,7 @@ export function DeadlineList({ today }: { today: string }) {
                           removeDeliverable(d.id, today);
                           setConfirmId(null);
                         }}
-                        className="rounded-full bg-danger px-3 py-1 text-sm font-semibold text-surface"
+                        className="rounded-md bg-danger px-2.5 py-1 text-sm font-semibold text-surface"
                       >
                         Delete
                       </button>
@@ -218,7 +234,7 @@ export function DeadlineList({ today }: { today: string }) {
                       type="button"
                       aria-label={`Delete ${d.title}`}
                       onClick={() => setConfirmId(d.id)}
-                      className="rounded-full px-2 py-1 text-lg leading-none text-muted hover:bg-accent-soft hover:text-ink"
+                      className="rounded-md px-2 py-1 text-lg leading-none text-muted hover:bg-surface-2 hover:text-ink"
                     >
                       ×
                     </button>

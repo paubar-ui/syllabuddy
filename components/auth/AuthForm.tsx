@@ -42,7 +42,7 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
 
   return (
     <main id="main" className="mx-auto w-full max-w-md flex-1 px-4 py-10">
-      <Tick size={72} className="mx-auto" />
+      <Tick size={40} className="mx-auto" />
       <h1 className="mt-3 text-center text-2xl font-bold">
         {isSignup ? "Create your free account" : "Welcome back"}
       </h1>

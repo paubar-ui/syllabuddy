@@ -165,8 +165,11 @@ test("a full session: sample semester, check a block, plan, export, grade calcul
   await page.getByTestId("panic-button").click();
   await expect(page.getByTestId("panic-result")).toContainText(/Do fully|Minimum viable|Nothing is due/);
 
-  await page.getByRole("link", { name: "Buddies", exact: true }).filter({ visible: true }).first().click();
+  await page.goto("/app");
+  await page.getByRole("link", { name: "See the leaderboard" }).click();
   await expect(page.getByTestId("leaderboard")).toBeVisible();
+  await page.getByRole("link", { name: "Settings" }).filter({ visible: true }).first().click();
+  await expect(page.getByRole("link", { name: "Open study buddies" })).toBeVisible();
 
   await page.goto("/app");
   await page.getByRole("link", { name: /Start a focus session/ }).first().click();
@@ -183,13 +186,13 @@ test("a full session: sample semester, check a block, plan, export, grade calcul
 test("onboarding with a pasted syllabus works without an AI key", async ({ page }) => {
   await signUp(page, "onboarding");
   await page.goto("/onboarding");
+  await expect(page.getByRole("link", { name: "Skip for now" })).toBeVisible();
   await page.getByTestId("syllabus-input").fill("Course: Statistics\nMidterm exam – 40% – 12/11/2030\nFinal exam 60% 20/01/2031");
   await page.getByTestId("extract-button").click();
   await expect(page.getByTestId("review-table").getByLabel("Title")).toHaveCount(2);
-  await page.getByTestId("save-courses-button").click();
   await page.locator('[data-testid^="effort-slider-"]').focus();
   await page.keyboard.press("ArrowRight");
-  await page.getByRole("button", { name: "Next: free time" }).click();
+  await page.getByTestId("save-courses-button").click();
   await page.getByTestId("generate-plan-button").click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByTestId("core-item")).toHaveCount(2);
@@ -232,4 +235,24 @@ test("keyboard only: sign up and add a deadline", async ({ page }) => {
   await page.keyboard.type("Essay draft");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("core-item").filter({ hasText: "Essay draft" })).toBeVisible();
+});
+
+test("a save that fails (network hiccup) is retried and nothing is lost", async ({ page }) => {
+  await signUp(page, "retry");
+  let blocked = 0;
+  await page.route("**/rest/v1/planner_state*", async (route) => {
+    if (route.request().method() === "POST" && blocked < 2) {
+      blocked++;
+      return route.abort("failed");
+    }
+    return route.continue();
+  });
+  await page.getByTestId("core-input").fill("Retry check essay");
+  await page.getByTestId("core-submit").click();
+  await expect(page.getByText("isn't saved yet")).toBeVisible();
+  await expect(page.getByTestId("core-item").filter({ hasText: "Retry check essay" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("isn't saved yet")).toHaveCount(0);
+  await page.unrouteAll();
+  await page.reload();
+  await expect(page.getByTestId("core-item").filter({ hasText: "Retry check essay" })).toBeVisible({ timeout: 15_000 });
 });

@@ -3,9 +3,8 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { DemoButton } from "@/components/DemoButton";
-import { Tick } from "@/components/Tick";
-import { buttonPrimary, buttonSecondary, card } from "@/components/ui";
+import { Callout, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
+import { buttonPrimary, buttonSecondary, card, pageWide } from "@/components/ui";
 import { addDaysISO, todayISO } from "@/lib/dates";
 import { buildIcs } from "@/lib/ics";
 import { heatLevel, weekDays, weeksBetween, weekStart, workloadByDay } from "@/lib/plan";
@@ -29,8 +28,8 @@ export function PlanView() {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 pb-28 md:pb-10" aria-busy="true">
-        <h1 className="text-2xl font-bold">Plan</h1>
+      <main id="main" className={pageWide} aria-busy="true">
+        <h1 className="text-2xl font-semibold">Plan</h1>
         <p className="mt-2 text-muted">Loading your plan…</p>
       </main>
     );
@@ -53,16 +52,26 @@ function PlanContent() {
 
   if (courses.length === 0) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 pb-28 text-center md:pb-10">
-        <Tick size={96} className="mx-auto" />
-        <h1 className="mt-4 text-2xl font-bold">No plan yet</h1>
-        <p className="mt-2 text-muted">Add your syllabi first, or try the demo semester.</p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <DemoButton />
-          <Link href="/onboarding" className={buttonSecondary}>
-            Start with my syllabi
-          </Link>
-        </div>
+      <main id="main" className={pageWide}>
+        <PageHeader
+          title="Plan"
+          description="Your study blocks week by week, and how busy the whole semester looks."
+        />
+        <EmptyState
+          title="Nothing planned yet"
+          action={
+            <>
+              <Link href="/app" className={buttonPrimary}>
+                Add a deadline
+              </Link>
+              <Link href="/onboarding" className={buttonSecondary}>
+                Add a course from a syllabus
+              </Link>
+            </>
+          }
+        >
+          Add your first deadline on Today (or a whole syllabus) and your week will fill in here automatically.
+        </EmptyState>
       </main>
     );
   }
@@ -91,25 +100,33 @@ function PlanContent() {
   const maxMinutes = Math.max(0, ...[...load.values()].map((l) => l.minutes));
 
   return (
-    <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold sm:text-3xl">Plan</h1>
-        <button type="button" data-testid="export-ics-button" onClick={exportCalendar} className={buttonPrimary}>
-          Export to calendar
-        </button>
-      </div>
-      <p aria-live="polite" className="mt-2 text-sm text-muted">
-        {exported}
-      </p>
+    <main id="main" className={pageWide}>
+      <PageHeader
+        title="Plan"
+        description="Your study blocks week by week, and how busy the whole semester looks. Want them in Google or Apple Calendar? Export them."
+        action={
+          <button type="button" data-testid="export-ics-button" onClick={exportCalendar} className={buttonPrimary}>
+            Export to calendar
+          </button>
+        }
+      />
+      {exported && (
+        <Callout tone="success" role="status" title="Calendar file downloaded" className="mb-4">
+          {exported}
+        </Callout>
+      )}
 
       {/* ---------------- Week view ---------------- */}
-      <section aria-labelledby="week-title" className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section aria-labelledby="week-title">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 id="week-title" className="text-lg font-semibold">
+            <h2 id="week-title" className="text-lg font-semibold tracking-tight">
               Week of {pretty(monday, "d MMMM")}
             </h2>
-            <p className="text-sm text-muted">{hoursText(weekMinutes)} planned this week</p>
+            <p className="text-sm text-muted">
+              {hoursText(weekMinutes)} planned this week. Use the arrows to look ahead; the coloured edge shows the course,
+              red labels are deadlines.
+            </p>
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={() => setMonday(addDaysISO(monday, -7))} className={buttonSecondary}>
@@ -131,7 +148,7 @@ function PlanContent() {
           </div>
         </div>
 
-        <ol className="mt-4 grid gap-3 md:grid-cols-7">
+        <ol className="mt-4 grid gap-3 lg:grid-cols-7">
           {days.map((day) => {
             const dayBlocks = blocks.filter((b) => b.date === day);
             const due = deliverables.filter((d) => !d.done && d.dueDate === day);
@@ -140,12 +157,12 @@ function PlanContent() {
               <li
                 key={day}
                 aria-current={isToday ? "date" : undefined}
-                className={`rounded-2xl border p-3 ${isToday ? "border-accent border-2" : "border-line"} ${
+                className={`rounded-xl border p-3 ${isToday ? "border-accent border-2" : "border-line"} ${
                   // Past days: a quieter background instead of fading the text (keeps it readable).
                   day < today ? "border-dashed bg-bg" : "bg-surface"
                 }`}
               >
-                <h3 className="flex items-baseline justify-between gap-2 md:block">
+                <h3 className="flex items-baseline justify-between gap-2 lg:block">
                   <span className="font-semibold">
                     {pretty(day, "EEE d")}
                     {isToday && <span className="ml-1 text-xs font-medium text-accent">today</span>}
@@ -154,7 +171,7 @@ function PlanContent() {
                 </h3>
                 <ul className="mt-2 space-y-1.5">
                   {due.map((d) => (
-                    <li key={d.id} className="rounded-lg bg-danger-soft px-2 py-1 text-xs font-semibold text-danger">
+                    <li key={d.id} className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-xs font-semibold text-danger">
                       Due: {d.title}
                     </li>
                   ))}
@@ -188,7 +205,7 @@ function PlanContent() {
 
       {/* ---------------- Heatmap ---------------- */}
       <section aria-labelledby="heatmap-title" className={`${card} mt-8`}>
-        <h2 id="heatmap-title" className="text-lg font-semibold">
+        <h2 id="heatmap-title" className="text-lg font-semibold tracking-tight">
           Semester workload
         </h2>
         <p className="mt-1 text-sm text-muted">
@@ -266,17 +283,30 @@ function PlanContent() {
       </section>
 
       {warnings.length > 0 && (
-        <details className="mt-8 rounded-xl bg-warn-bg px-4 py-3 text-warn-ink">
-          <summary className="cursor-pointer font-medium">
-            {warnings.length} thing{warnings.length === 1 ? "" : "s"} didn&apos;t fit in your plan
-          </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+        <Callout
+          tone="warn"
+          className="mt-6"
+          title={`${warnings.length} thing${warnings.length === 1 ? "" : "s"} didn't fit in your plan`}
+        >
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {warnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
           </ul>
-        </details>
+          <p className="mt-1">Add more study time in Settings, or open Panic mode from Today to decide what to skip.</p>
+        </Callout>
       )}
+
+      <div className="mt-6">
+        <HowItWorks title="How to add your plan to Google Calendar">
+          <p>1. Click “Export to calendar” — a file called syllabuddy.ics downloads.</p>
+          <p>
+            2. In Google Calendar, open Settings → Import &amp; export → Import, choose the file and a calendar (tip: create
+            an empty “Syllabuddy” calendar first so you can remove it in one go).
+          </p>
+          <p>3. Study blocks appear from 18:00 each day; deadlines appear as all-day events. Export again after big changes.</p>
+        </HowItWorks>
+      </div>
     </main>
   );
 }

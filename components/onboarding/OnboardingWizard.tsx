@@ -1,6 +1,7 @@
 "use client";
 // Onboarding: 1) paste/upload a syllabus → 2) review what we found → 3) effort & target grades
 // → 4) weekly free time → generate the plan. Nothing is saved until the very last button.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { todayISO } from "@/lib/dates";
@@ -29,10 +30,10 @@ import type { Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
 import { availabilityFromForm, formFromAvailability } from "@/lib/availability";
 import { AvailabilityFields } from "../AvailabilityFields";
-import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "../ui";
+import { buttonLink, buttonPrimary, buttonSecondary, card, input, label, page } from "../ui";
 
-type Step = 1 | 2 | 3 | 4;
-const STEPS = ["Add syllabus", "Review", "Effort & goals", "Free time"];
+type Step = 1 | 2 | 3;
+const STEPS = ["Add a syllabus", "Check & adjust", "Your free time"];
 const TYPE_LABELS: Record<(typeof DELIVERABLE_TYPES)[number], string> = {
   exam: "Exam",
   midterm: "Midterm",
@@ -63,13 +64,17 @@ export function OnboardingWizard() {
     window.scrollTo({ top: 0 });
   }, [step]);
 
-  const updateCourse = (id: string, patch: Partial<DraftCourse>) =>
-    setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
-
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 sm:py-10 md:pb-10">
-      <p className="text-sm font-semibold uppercase tracking-wider text-accent">Set up your semester</p>
-      <ol className="mt-3 grid grid-cols-4 gap-2" aria-label="Progress">
+    <main id="main" className={page}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-muted">
+          Add courses from a syllabus · Step {step} of {STEPS.length}
+        </p>
+        <Link href="/app" className="text-sm font-medium text-muted underline underline-offset-2 hover:text-ink">
+          Skip for now
+        </Link>
+      </div>
+      <ol className="mt-3 grid grid-cols-3 gap-2" aria-label="Progress">
         {STEPS.map((name, i) => {
           const n = i + 1;
           return (
@@ -115,19 +120,11 @@ export function OnboardingWizard() {
               setNotice(null);
               setStep(1);
             }}
+            onBack={() => setStep(1)}
             onNext={() => setStep(3)}
           />
         )}
-        {step === 3 && (
-          <StepEffort
-            headingRef={headingRef}
-            drafts={drafts}
-            updateCourse={updateCourse}
-            onBack={() => setStep(2)}
-            onNext={() => setStep(4)}
-          />
-        )}
-        {step === 4 && <StepAvailability headingRef={headingRef} drafts={drafts} onBack={() => setStep(3)} />}
+        {step === 3 && <StepAvailability headingRef={headingRef} drafts={drafts} onBack={() => setStep(2)} />}
       </div>
     </main>
   );
@@ -137,7 +134,7 @@ type HeadingRef = React.RefObject<HTMLHeadingElement | null>;
 
 function StepHeading({ headingRef, children }: { headingRef: HeadingRef; children: ReactNode }) {
   return (
-    <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold sm:text-3xl">
+    <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight sm:text-3xl">
       {children}
     </h1>
   );
@@ -349,6 +346,7 @@ function StepReview({
   setDrafts,
   notice,
   onAddSyllabus,
+  onBack,
   onNext,
 }: {
   headingRef: HeadingRef;
@@ -356,6 +354,7 @@ function StepReview({
   setDrafts: React.Dispatch<React.SetStateAction<DraftCourse[]>>;
   notice: string | null;
   onAddSyllabus: () => void;
+  onBack: () => void;
   onNext: () => void;
 }) {
   const [problems, setProblems] = useState<DraftProblem[]>([]);
@@ -454,6 +453,41 @@ function StepReview({
                   {course.attendancePolicy}
                 </p>
               )}
+
+              <div className="mt-4 grid gap-4 rounded-lg bg-surface-2 p-3 sm:grid-cols-[1fr_10rem]">
+                <div>
+                  <label htmlFor={`effort-${course.id}`} className={label}>
+                    How hard is this course for you? <span className="font-semibold">{EFFORT_LABELS[course.effort]}</span>
+                  </label>
+                  <input
+                    id={`effort-${course.id}`}
+                    data-testid={`effort-slider-${course.id}`}
+                    type="range"
+                    min={1}
+                    max={5}
+                    step={1}
+                    value={course.effort}
+                    aria-valuetext={`${course.effort} of 5, ${EFFORT_LABELS[course.effort]}`}
+                    onChange={(e) => updateCourse(course.id, { effort: Number(e.target.value) as Effort })}
+                    className="w-full accent-[var(--accent)]"
+                  />
+                  <p className="text-xs text-muted">Harder courses get more study time.</p>
+                </div>
+                <div>
+                  <label htmlFor={`target-${course.id}`} className={label}>
+                    Target grade (/{course.gradeScale})
+                  </label>
+                  <input
+                    id={`target-${course.id}`}
+                    inputMode="decimal"
+                    className={input}
+                    value={course.targetGrade}
+                    placeholder={course.gradeScale === 100 ? "e.g. 75" : "e.g. 8"}
+                    onChange={(e) => updateCourse(course.id, { targetGrade: e.target.value })}
+                  />
+                  <p className="text-xs text-muted">Optional.</p>
+                </div>
+              </div>
 
               <ul className="mt-4 space-y-3">
                 {course.items.map((item, ii) => {
@@ -561,6 +595,9 @@ function StepReview({
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <button type="button" onClick={onBack} className={buttonSecondary}>
+          Back
+        </button>
         <button type="button" onClick={onAddSyllabus} className={buttonSecondary}>
           + Add another syllabus
         </button>
@@ -572,7 +609,7 @@ function StepReview({
           + Add a course by hand
         </button>
         <button type="button" data-testid="save-courses-button" onClick={save} className={`${buttonPrimary} sm:ml-auto`}>
-          Save courses
+          Next: your free time
         </button>
       </div>
     </section>
@@ -591,98 +628,8 @@ const EFFORT_LABELS: Record<Effort, string> = {
   5: "Very hard for me",
 };
 
-function StepEffort({
-  headingRef,
-  drafts,
-  updateCourse,
-  onBack,
-  onNext,
-}: {
-  headingRef: HeadingRef;
-  drafts: DraftCourse[];
-  updateCourse: (id: string, patch: Partial<DraftCourse>) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const [error, setError] = useState<string | null>(null);
-
-  function next() {
-    const bad = validateDrafts(drafts).find((p) => p.message.includes("target grade"));
-    if (bad) setError(bad.message);
-    else onNext();
-  }
-
-  return (
-    <section>
-      <StepHeading headingRef={headingRef}>How hard is each course for you?</StepHeading>
-      <p className="mt-2 text-muted">
-        Harder courses get more study time. Your target grade is optional — it helps the grade calculator later.
-      </p>
-      {error && (
-        <p role="alert" className="mt-3 rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
-          {error}
-        </p>
-      )}
-      <ul className="mt-6 space-y-4">
-        {drafts.map((c) => (
-          <li key={c.id} className={card}>
-            <p className="flex items-center gap-2 font-semibold">
-              <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: c.color }} />
-              {c.name}
-            </p>
-            <div className="mt-3 grid gap-4 sm:grid-cols-[1fr_10rem]">
-              <div>
-                <label htmlFor={`effort-${c.id}`} className={label}>
-                  Difficulty: <span className="font-semibold">{EFFORT_LABELS[c.effort]}</span>
-                </label>
-                <input
-                  id={`effort-${c.id}`}
-                  data-testid={`effort-slider-${c.id}`}
-                  type="range"
-                  min={1}
-                  max={5}
-                  step={1}
-                  value={c.effort}
-                  aria-valuetext={`${c.effort} of 5, ${EFFORT_LABELS[c.effort]}`}
-                  onChange={(e) => updateCourse(c.id, { effort: Number(e.target.value) as Effort })}
-                  className="w-full accent-[var(--accent)]"
-                />
-                <div className="flex justify-between text-xs text-muted" aria-hidden="true">
-                  <span>Easy</span>
-                  <span>Very hard</span>
-                </div>
-              </div>
-              <div>
-                <label htmlFor={`target-${c.id}`} className={label}>
-                  Target grade (/{c.gradeScale})
-                </label>
-                <input
-                  id={`target-${c.id}`}
-                  inputMode="decimal"
-                  className={input}
-                  value={c.targetGrade}
-                  placeholder={c.gradeScale === 100 ? "e.g. 75" : "e.g. 8"}
-                  onChange={(e) => updateCourse(c.id, { targetGrade: e.target.value })}
-                />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-        <button type="button" onClick={onBack} className={buttonSecondary}>
-          Back
-        </button>
-        <button type="button" onClick={next} className={buttonPrimary}>
-          Next: free time
-        </button>
-      </div>
-    </section>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Step 4 — weekly availability, then generate the plan
+// Step 3 — weekly availability, then generate the plan
 // ---------------------------------------------------------------------------
 
 function StepAvailability({

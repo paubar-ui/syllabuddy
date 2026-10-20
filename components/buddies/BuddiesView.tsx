@@ -1,8 +1,9 @@
 "use client";
 // /buddies: weekly leaderboard with friends (points, streak, hours only), using your account.
 import { useCallback, useEffect, useState } from "react";
+import { HowItWorks, PageHeader } from "@/components/kit";
 import { MascotBubble } from "@/components/Tick";
-import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
+import { buttonLink, buttonPrimary, buttonSecondary, card, input, label, page } from "@/components/ui";
 import {
   addFriend,
   deleteMyData,
@@ -29,8 +30,8 @@ export function BuddiesView() {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10" aria-busy="true">
-        <h1 className="text-2xl font-bold">Study buddies</h1>
+      <main id="main" className={page} aria-busy="true">
+        <h1 className="text-2xl font-semibold">Study buddies</h1>
         <p className="mt-2 text-muted">Loading…</p>
       </main>
     );
@@ -41,11 +42,17 @@ export function BuddiesView() {
 function BuddiesContent() {
   const user = useSession((s) => s.user);
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <h1 className="text-2xl font-bold sm:text-3xl">Study buddies</h1>
-      <p className="mt-1 text-muted">
-        Compete with friends on points, streaks and hours. They never see your deadlines, courses or grades.
-      </p>
+    <main id="main" className={page}>
+      <PageHeader
+        back={{ href: "/settings", label: "Settings" }}
+        title="Study buddies"
+        description="Compete with friends on a weekly leaderboard of points, streaks and study hours. They never see your deadlines, courses or grades."
+      />
+      <HowItWorks>
+        <p>1. Pick a display name — it&apos;s the only thing friends see besides your weekly numbers.</p>
+        <p>2. Share your 6-character invite code, or type a friend&apos;s code under “Add a friend”.</p>
+        <p>3. Every week starts at zero. Points come from finishing study blocks, focus sessions and deadlines.</p>
+      </HowItWorks>
       {user ? (
         <SignedIn userId={user.id} email={user.email} />
       ) : (
@@ -67,7 +74,7 @@ function DemoPreview() {
         <h2 id="demo-board" className="text-lg font-semibold">
           Example leaderboard
         </h2>
-        <span className="rounded-full bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">
+        <span className="rounded-md border border-warn-line bg-warn-bg px-2 py-0.5 text-xs font-semibold text-warn-ink">
           Preview — these friends are made up
         </span>
       </div>
@@ -246,7 +253,7 @@ function AddFriendCard({ onAdded }: { onAdded: () => void }) {
           const result = await addFriend(code);
           if (result.error) setMessage({ error: true, text: result.error });
           else {
-            setMessage({ error: false, text: `${result.name} is now your study buddy! 🎉` });
+            setMessage({ error: false, text: `${result.name} is now your study buddy!` });
             setCode("");
             onAdded();
           }
@@ -323,7 +330,7 @@ function AccountCard({ profile, onRenamed }: { profile: MyProfile; onRenamed: ()
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full bg-danger px-5 py-2.5 font-semibold text-surface"
+                className="inline-flex items-center justify-center rounded-lg bg-danger px-4 py-2.5 text-sm font-semibold text-surface"
                 onClick={async () => {
                   const problem = await deleteMyData();
                   setStatus(problem ?? "You left Study Buddies.");
@@ -385,13 +392,21 @@ function Leaderboard({
         <tbody>
           {ranked.map((e) => (
             <tr key={e.id} className={`border-t border-line ${e.isMe ? "bg-accent-soft font-semibold" : ""}`}>
-              <td className="px-3 py-2.5">{e.rank === 1 ? "🥇" : e.rank === 2 ? "🥈" : e.rank === 3 ? "🥉" : e.rank}</td>
+              <td className="px-3 py-2.5">
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                    e.rank === 1 ? "bg-accent text-on-accent" : "bg-surface-2 text-ink"
+                  }`}
+                >
+                  {e.rank}
+                </span>
+              </td>
               <th scope="row" className="px-3 py-2.5 font-medium">
                 {e.isMe && e.name !== "You" ? `${e.name} (you)` : e.name}
               </th>
               <td className="px-3 py-2.5 text-right tabular-nums">{e.points}</td>
               <td className="px-3 py-2.5 text-right tabular-nums">
-                {e.streak} <span aria-hidden="true">🔥</span>
+                {e.streak} {e.streak === 1 ? "day" : "days"}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums">{Math.round((e.minutes / 60) * 10) / 10}</td>
               {onRemove && (

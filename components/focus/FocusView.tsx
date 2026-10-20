@@ -5,8 +5,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { HowItWorks, PageHeader } from "@/components/kit";
 import { Tick } from "@/components/Tick";
-import { buttonLink, buttonPrimary, buttonSecondary, card } from "@/components/ui";
+import { buttonPrimary, buttonSecondary, card } from "@/components/ui";
 import { todayISO } from "@/lib/dates";
 import {
   FOCUS_MS,
@@ -124,7 +125,7 @@ function FocusContent() {
   if (!block || !deliverable) {
     return (
       <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-10 pb-28 text-center md:pb-10">
-        <Tick size={96} className="mx-auto" />
+        <Tick size={48} className="mx-auto" />
         <h1 className="mt-4 text-2xl font-bold">Study block not found</h1>
         <p className="mt-2 text-muted">It may have moved when your plan was updated.</p>
         <Link href="/app" className={`${buttonSecondary} mt-6`}>
@@ -165,18 +166,16 @@ function FocusContent() {
   const blockDone = block.status === "done";
 
   return (
-    <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/app" className={`${buttonLink} text-sm`}>
-        ← Back to today
-      </Link>
-      <h1 className="mt-3 text-2xl font-bold sm:text-3xl">{deliverable.title}</h1>
-      <p className="text-muted">
-        {course?.name} · {block.minutes}-minute block · {focused} min focused so far
-        {blockDone && " · ✅ block done"}
-      </p>
+    <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-6 pb-28 sm:px-6 md:py-8 md:pb-10">
+      <PageHeader
+        back={{ href: "/app", label: "Today" }}
+        eyebrow={`Focus session · ${course?.name ?? ""}`}
+        title={deliverable.title}
+        description={`${block.minutes}-minute block · ${focused} min focused so far${blockDone ? " · block done" : ""}. Press Start, put your phone away, and work on just this until the timer ends.`}
+      />
 
       <section aria-labelledby="timer-label" className={`${card} mt-6 flex flex-col items-center py-8`}>
-        <p id="timer-label" className={`text-sm font-semibold uppercase tracking-wider ${timer.phase === "focus" ? "text-accent" : "text-success"}`}>
+        <p id="timer-label" className={`text-sm font-semibold ${timer.phase === "focus" ? "text-accent" : "text-success"}`}>
           {label}
           {timer.sessions > 0 && ` · ${timer.sessions} session${timer.sessions === 1 ? "" : "s"} done`}
         </p>
@@ -236,10 +235,16 @@ function FocusContent() {
         </p>
       </section>
 
-      <p className="mt-4 text-sm text-muted">
-        Each full 25-minute session logs 25 minutes and earns a +{FOCUS_BONUS} bonus. Stopping early logs the
-        whole minutes you focused. The timer keeps going if you switch tabs.
-      </p>
+      <div className="mt-4">
+        <HowItWorks title="How a focus session works">
+          <p>25 minutes of focus, then a 5-minute break that starts by itself (the Pomodoro technique).</p>
+          <p>
+            Each full session logs 25 minutes on this deadline and earns a +{FOCUS_BONUS} bonus. Stopping early logs the
+            whole minutes you focused. When you&apos;ve focused for the whole block, it&apos;s ticked off for you.
+          </p>
+          <p>The timer keeps running if you switch tabs or close the page, and a soft chime plays when a phase ends.</p>
+        </HowItWorks>
+      </div>
     </main>
   );
 }

@@ -4,8 +4,8 @@ import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useState } from "react";
 import { DemoButton } from "@/components/DemoButton";
-import { Tick } from "@/components/Tick";
-import { buttonSecondary, card, input, label } from "@/components/ui";
+import { Callout, CourseDot, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
+import { buttonPrimary, card, input, label, page } from "@/components/ui";
 import { todayISO } from "@/lib/dates";
 import { requiredScore } from "@/lib/grades";
 import { paceInsights } from "@/lib/pace";
@@ -32,8 +32,8 @@ export function CoursesView() {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10" aria-busy="true">
-        <h1 className="text-2xl font-bold">Courses</h1>
+      <main id="main" className={page} aria-busy="true">
+        <h1 className="text-2xl font-semibold">Courses</h1>
         <p className="mt-2 text-muted">Loading your courses…</p>
       </main>
     );
@@ -49,45 +49,74 @@ function CoursesContent() {
 
   if (courses.length === 0) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 pb-28 text-center md:pb-10">
-        <Tick size={96} className="mx-auto" />
-        <h1 className="mt-4 text-2xl font-bold">No courses yet</h1>
-        <p className="mt-2 text-muted">Add your syllabi first, or try the demo semester.</p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <DemoButton />
-          <Link href="/onboarding" className={buttonSecondary}>
-            Start with my syllabi
-          </Link>
-        </div>
+      <main id="main" className={page}>
+        <PageHeader
+          title="Courses"
+          description="All your courses and their graded work: mark things done, enter your scores and see what you need to reach your target grade."
+        />
+        <EmptyState
+          title="No courses yet"
+          action={
+            <>
+              <Link href="/onboarding" className={buttonPrimary}>
+                Add a syllabus
+              </Link>
+              <DemoButton label="Load a sample semester" variant="secondary" />
+            </>
+          }
+        >
+          Add a syllabus and we&apos;ll create the course with all its deadlines and grade weights. Single deadlines you add
+          on Today appear here too.
+        </EmptyState>
       </main>
     );
   }
 
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">Courses</h1>
-        <Link href="/onboarding" className="text-sm font-medium text-accent underline underline-offset-2">
-          Add or replace syllabi
-        </Link>
-      </div>
+    <main id="main" className={page}>
+      <PageHeader
+        title="Courses"
+        description="All your courses and their graded work. Tick what you've finished, enter the scores you get, and check what you need to reach your target grade."
+        action={
+          <Link href="/onboarding" className={buttonPrimary}>
+            Add a syllabus
+          </Link>
+        }
+      />
 
-      <section aria-labelledby="pace-title" className="mt-4 rounded-2xl bg-accent-soft px-4 py-3">
-        <h2 id="pace-title" className="font-semibold">
-          How long things take you
-        </h2>
-        {insights.length === 0 ? (
-          <p className="text-sm">
-            Mark work as done after logging time, and Syllabuddy learns how long things really take you.
+      <div className="space-y-3">
+        <Callout tone="info" title="How long things take you">
+          <h2 id="pace-title" className="sr-only">
+            Your pace
+          </h2>
+          {insights.length === 0 ? (
+            <p>
+              Not enough data yet. When you finish something, tick it here: Syllabuddy compares the time you logged with
+              the time it planned and adjusts future estimates.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {insights.map((i) => (
+                <li key={i.type}>Your pace: {i.text.charAt(0).toLowerCase() + i.text.slice(1)}.</li>
+              ))}
+            </ul>
+          )}
+        </Callout>
+        <HowItWorks title="What to do on this page">
+          <p>
+            <span className="font-medium">Tick a deliverable</span> when it&apos;s handed in or the exam is over: you get
+            50 points, its remaining study blocks disappear and your pace is updated.
           </p>
-        ) : (
-          <ul className="mt-1 space-y-0.5 text-sm">
-            {insights.map((i) => (
-              <li key={i.type}>Your pace: {i.text.charAt(0).toLowerCase() + i.text.slice(1)}.</li>
-            ))}
-          </ul>
-        )}
-      </section>
+          <p>
+            <span className="font-medium">Enter your score</span> once you get a grade back. The grade calculator below
+            each course uses it to tell you what you need on the rest.
+          </p>
+          <p>
+            <span className="font-medium">Change the difficulty</span> if a course turns out easier or harder than you
+            thought — your plan is updated straight away.
+          </p>
+        </HowItWorks>
+      </div>
 
       <div className="mt-6 space-y-6">
         {courses.map((course, i) => (
@@ -121,12 +150,22 @@ function CourseCard({
   const [announcement, setAnnouncement] = useState("");
 
   return (
-    <section aria-labelledby={`course-${course.id}`} className={card}>
+    <section
+      aria-labelledby={`course-${course.id}`}
+      className={card}
+      style={{ borderTop: `4px solid ${course.color}` }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id={`course-${course.id}`} className="flex items-center gap-2 text-lg font-semibold">
-          <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: course.color }} />
-          {course.name}
-        </h2>
+        <div>
+          <h2 id={`course-${course.id}`} className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <CourseDot color={course.color} />
+            {course.name}
+          </h2>
+          <p className="text-sm text-muted">
+            {items.filter((d) => d.done).length} of {items.length} done ·{" "}
+            {num(items.reduce((sum, d) => sum + d.loggedMinutes, 0) / 60)}h logged
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <label htmlFor={`effort-${course.id}`} className="text-sm text-muted">
             Difficulty
@@ -246,8 +285,8 @@ function GradeCalculator({ course, items, testId }: { course: Course; items: Del
         tone: "good",
         text:
           r.remainingWeight > 0
-            ? `🎉 You've already secured ${num(target)}/${scale} — even a 0 on the rest keeps you there.`
-            : `🎉 You reached your target: your final grade is ${num(r.maxReachable)}/${scale}.`,
+            ? `You've already secured ${num(target)}/${scale} — even a 0 on the rest keeps you there.`
+            : `You reached your target: your final grade is ${num(r.maxReachable)}/${scale}.`,
       };
     } else if (r.possible) {
       result = {
@@ -272,8 +311,12 @@ function GradeCalculator({ course, items, testId }: { course: Course; items: Del
   };
 
   return (
-    <div data-testid={testId} className="mt-4 rounded-xl border border-line p-4">
+    <div data-testid={testId} className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
       <h3 className="font-semibold">Grade calculator</h3>
+      <p className="text-sm text-muted">
+        Enter the scores you already have above, then your target. We work out the average you need on everything
+        that&apos;s left.
+      </p>
       <div className="mt-2 max-w-48">
         <label htmlFor={id} className={label}>
           Target grade (/{scale})

@@ -8,7 +8,7 @@ export function LandingCta() {
   const signedIn = useSession((s) => s.status === "signedIn");
   return (
     <div className="mt-8 flex flex-col items-center gap-3">
-      <Link href={signedIn ? "/app" : "/signup"} className={`${buttonPrimary} px-8 py-3 text-lg`}>
+      <Link href={signedIn ? "/app" : "/signup"} className={`${buttonPrimary} px-6 py-3 text-base`}>
         {signedIn ? "Open my plan" : "Sign up — it's free"}
       </Link>
       {!signedIn && (

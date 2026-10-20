@@ -9,10 +9,13 @@ interface SessionState {
   status: SessionStatus;
   user: { id: string; email: string | null } | null;
   plan: PlanStatus;
+  /** True while a change couldn't be saved yet (it's being retried). */
+  saveFailing: boolean;
 }
 
 export const useSession = create<SessionState>(() => ({
   status: "loading",
   user: null,
   plan: "idle",
+  saveFailing: false,
 }));

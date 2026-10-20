@@ -40,20 +40,43 @@ function clearLegacyPlan() {
 
 const row = (id: string) => ({ user_id: id, state: dataOf(useStore.getState()), updated_at: new Date().toISOString() });
 
-async function saveNow(): Promise<void> {
+/** Returns true when the save reached Supabase (network problems count as failures). */
+async function saveNow(): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb || !userId) return;
-  const { error } = await sb.from("planner_state").upsert(row(userId));
-  if (error) console.warn("Couldn't save your plan:", error.message);
+  if (!sb || !userId) return true;
+  try {
+    const { error } = await sb.from("planner_state").upsert(row(userId));
+    if (error) console.warn("Couldn't save your plan:", error.message);
+    return !error;
+  } catch (e) {
+    console.warn("Couldn't save your plan:", e);
+    return false;
+  }
 }
 
-/** Saves straight away; changes made during a save are saved right after it. */
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const MAX_RETRIES = 6;
+
+/**
+ * Saves straight away; changes made during a save are saved right after it.
+ * A failed save is retried (1s, 2s, 4s…) and the app shows a notice meanwhile — never lost silently.
+ */
 function requestSave() {
   dirty = true;
   saving ??= (async () => {
-    while (dirty) {
+    let failures = 0;
+    while (dirty && userId) {
       dirty = false;
-      await saveNow();
+      if (await saveNow()) {
+        failures = 0;
+        useSession.setState({ saveFailing: false });
+      } else {
+        dirty = true;
+        failures++;
+        useSession.setState({ saveFailing: true });
+        if (failures > MAX_RETRIES) break;
+        await wait(1000 * 2 ** Math.min(failures - 1, 4));
+      }
     }
     saving = null;
   })();
@@ -108,6 +131,7 @@ export async function startPlanSync(id: string): Promise<void> {
   const legacy = data ? null : readLegacyPlan();
   useStore.getState().replaceAll((data?.state as Partial<Data>) ?? legacy ?? {});
   if (!data) await saveNow(); // create your row (with the old in-browser plan, if there was one)
+  if (!data && userId === id) requestSave(); // make sure it exists even if that first save failed
   clearLegacyPlan();
 
   unsubscribe = useStore.subscribe(requestSave);
@@ -121,5 +145,5 @@ export function stopPlanSync(): void {
   dirty = false;
   userId = null;
   useStore.getState().reset();
-  useSession.setState({ plan: "idle" });
+  useSession.setState({ plan: "idle", saveFailing: false });
 }
