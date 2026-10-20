@@ -29,6 +29,8 @@ export const extractedDeliverableSchema = z.object({
   type: z.enum(DELIVERABLE_TYPES).catch("other"),
   dueDate: isoDate.nullable().catch(null),
   weight: z.number().min(0).max(100).nullable().catch(null),
+  /** "Due in Session 15": the date can come from the Blackboard calendar (V2-3). */
+  sessionRef: z.number().int().min(1).max(60).optional().catch(undefined),
 });
 
 export type ExtractedDeliverable = z.infer<typeof extractedDeliverableSchema>;

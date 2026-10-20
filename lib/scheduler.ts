@@ -8,6 +8,7 @@
 //   Anything still left becomes a warning.
 // Exams 14 days away or less start straight away: their window is every day until the exam,
 // with a gentler ramp (V2-6). Blocks moved by hand ("pinned") stay where you put them.
+// Evening classes from the Blackboard calendar take their time off that day's free time (V2-3).
 import { addDaysISO, daysBetween, weekdayIndex } from "./dates";
 import { isExam } from "./examPlan";
 import type { Availability, Course, Deliverable, StudyBlock } from "./types";
@@ -25,6 +26,8 @@ export interface ScheduleInput {
   today: string;
   /** Previous plan. Done and missed blocks are kept; planned ones are regenerated. */
   existingBlocks?: StudyBlock[];
+  /** Study minutes taken by classes, per day (Blackboard calendar, V2-3). */
+  busyMinutes?: Record<string, number>;
 }
 
 export interface ScheduleResult {
@@ -105,6 +108,7 @@ export function generateSchedule({
   availability,
   today,
   existingBlocks = [],
+  busyMinutes = {},
 }: ScheduleInput): ScheduleResult {
   const warnings: string[] = [];
 
@@ -122,7 +126,7 @@ export function generateSchedule({
     if (b.status === "planned") pinnedMinutes.set(b.deliverableId, (pinnedMinutes.get(b.deliverableId) ?? 0) + b.minutes);
   }
   const free = (date: string) =>
-    Math.max(0, dayCapacity(availability, date) - (used.get(date) ?? 0));
+    Math.max(0, dayCapacity(availability, date) - (busyMinutes[date] ?? 0) - (used.get(date) ?? 0));
 
   const takenIds = new Set(kept.map((b) => b.id));
   const courseName = new Map(courses.map((c) => [c.id, c.name]));

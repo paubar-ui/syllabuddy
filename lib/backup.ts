@@ -56,6 +56,8 @@ const dataSchema = z.object({
       loggedMinutes: z.number().min(0),
       done: z.boolean(),
       exam: examSchema.optional(),
+      sessionRef: z.number().int().min(1).max(99).optional(),
+      dateFromCalendar: z.boolean().optional(),
     }),
   ),
   blocks: z.array(

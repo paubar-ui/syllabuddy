@@ -27,6 +27,7 @@ import { weeklyStats } from "@/lib/leaderboard";
 import { isExam } from "@/lib/examPlan";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
 import { blockDetail } from "@/lib/sessionDetail";
+import { studyStartMinute } from "@/lib/blackboard";
 import { useStore } from "@/lib/store";
 import type { Deliverable, StudyBlock } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
@@ -60,6 +61,7 @@ function TodayContent() {
   const [announcement, setAnnouncement] = useState("");
   const [replanDismissed, setReplanDismissed] = useState(false);
   const displayName = useStore((s) => s.displayName);
+  const calendar = useStore((s) => s.calendar);
   const [hour] = useState(() => new Date().getHours());
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -134,7 +136,8 @@ function TodayContent() {
     );
   }
 
-  const timeline = todayTimeline(blocks, deliverables, courses, today);
+  // Study starts at 18:00, or 15 minutes after an evening class (Blackboard calendar).
+  const timeline = todayTimeline(blocks, deliverables, courses, today, studyStartMinute(calendar, today) / 60);
   const todayBlocks = timeline.map((t) => t.block);
   const doneMinutes = todayBlocks.filter((b) => b.status === "done").reduce((s, b) => s + b.minutes, 0);
   const totalMinutes = todayBlocks.reduce((s, b) => s + b.minutes, 0);

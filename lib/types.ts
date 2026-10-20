@@ -68,6 +68,8 @@ export interface Deliverable {
   loggedMinutes: number; // from focus timer + manual logs
   done: boolean;
   exam?: ExamDetails; // only for exam / midterm / final (V2-6)
+  sessionRef?: number; // "due in Session 15" — its date comes from the Blackboard calendar (V2-3)
+  dateFromCalendar?: boolean; // true while the date is the one Blackboard gave (re-syncs update it)
 }
 
 export interface StudyBlock {
@@ -100,4 +102,30 @@ export interface Gamification {
   lastCheckedDate?: string; // last past day already checked for a missed streak
   mascotTone: "gentle" | "coach" | "savage";
   history: { date: string; minutes: number; points: number }[];
+}
+
+/** One class meeting from the Blackboard calendar, numbered per course in date order (V2-3). */
+export interface ClassSession {
+  number: number;
+  date: string; // ISO date
+  start: string; // "10:00"
+  end: string; // "11:30"
+}
+
+/** A course as it appears in the Blackboard calendar. */
+export interface CalendarCourse {
+  key: string; // stable grouping key
+  name: string;
+  sessions: ClassSession[];
+}
+
+/** The connected Blackboard calendar. The link is private: only you can read it (your own row). */
+export interface CalendarSync {
+  url?: string; // the share link (secret) — never logged, never exported
+  fileName?: string; // when an .ics file was uploaded instead
+  lastSync?: string; // ISO date-time of the last successful read
+  error?: string; // friendly message when the last re-sync failed
+  courses: CalendarCourse[];
+  /** Blackboard course key → Syllabuddy course id ("" = not matched). */
+  mapping: Record<string, string>;
 }

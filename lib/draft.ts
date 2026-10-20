@@ -3,7 +3,8 @@
 import type { ExtractedSyllabus } from "./extraction";
 import { newId } from "./id";
 import type { ParsedSchedule } from "./parseSessions";
-import type { Course, CourseSession, Deliverable, DeliverableType, Effort, ExamDetails } from "./types";
+import { sessionDate } from "./blackboard";
+import type { CalendarCourse, Course, CourseSession, Deliverable, DeliverableType, Effort, ExamDetails } from "./types";
 
 export const COURSE_COLORS = ["#1d4ed8", "#be185d", "#047857", "#b45309", "#7c3aed", "#0e7490", "#b91c1c"];
 
@@ -14,6 +15,8 @@ export interface DraftItem {
   dueDate: string; // "" when missing
   weight: string;
   exam?: ExamDetails; // details found in the syllabus for a midterm / final
+  sessionRef?: number; // "due in Session 15"
+  dateFromCalendar?: boolean; // the date was filled in from the Blackboard calendar
 }
 
 export interface DraftCourse {
@@ -26,6 +29,7 @@ export interface DraftCourse {
   targetGrade: string;
   items: DraftItem[];
   sessions: CourseSession[];
+  calendarKey?: string; // the matching course in the Blackboard calendar
 }
 
 export function emptyItem(makeId = newId): DraftItem {
@@ -73,6 +77,7 @@ export function draftFromExtraction(
           type: d.type,
           dueDate: d.dueDate ?? "",
           weight: d.weight === null ? "" : String(d.weight),
+          ...(d.sessionRef ? { sessionRef: d.sessionRef } : {}),
           ...(examFor(d.type) ? { exam: examFor(d.type) } : {}),
         }))
       : [emptyItem(makeId)],
@@ -158,7 +163,27 @@ export function draftsToStore(drafts: DraftCourse[]): {
       loggedMinutes: 0,
       done: false,
       ...(i.exam ? { exam: i.exam } : {}),
+      ...(i.sessionRef ? { sessionRef: i.sessionRef, dateFromCalendar: Boolean(i.dateFromCalendar) } : {}),
     })),
   );
   return { courses, deliverables };
+}
+
+/**
+ * Fills "Session N" dates from the matched Blackboard course (V2-3). Dates you typed yourself
+ * are kept; dates that came from the calendar follow a change of matched course.
+ */
+export function applyCalendarToDrafts(drafts: DraftCourse[], calendarCourses: CalendarCourse[]): DraftCourse[] {
+  return drafts.map((d) => {
+    const cc = calendarCourses.find((c) => c.key === d.calendarKey);
+    let changed = false;
+    const items = d.items.map((i) => {
+      if (!i.sessionRef || (i.dueDate && !i.dateFromCalendar)) return i;
+      const date = sessionDate(cc, i.sessionRef);
+      if (date === (i.dateFromCalendar ? i.dueDate : undefined)) return i;
+      changed = true;
+      return date ? { ...i, dueDate: date, dateFromCalendar: true } : { ...i, dueDate: "", dateFromCalendar: false };
+    });
+    return changed ? { ...d, items } : d;
+  });
 }

@@ -206,3 +206,27 @@ describe("normalizeExtraction", () => {
     expect(normalizeExtraction("hello")).toBeNull();
   });
 });
+
+describe("“Session N” due dates (Blackboard calendar)", () => {
+  const parse = (text: string) => parseSyllabus(text, { today: "2026-09-01" }).deliverables;
+
+  it("records the session number when that's all the syllabus gives", () => {
+    const [a, b, c] = parse(
+      "Midterm exam – Session 15 – 30%\nGroup presentation (Sesión 22) 20%\nProblem set 3, due S9, 10%",
+    );
+    expect(a).toMatchObject({ type: "midterm", title: "Midterm exam", dueDate: null, weight: 30, sessionRef: 15 });
+    expect(b).toMatchObject({ type: "presentation", dueDate: null, weight: 20, sessionRef: 22 });
+    expect(c).toMatchObject({ type: "homework", dueDate: null, weight: 10, sessionRef: 9 });
+  });
+
+  it("keeps a written date but remembers the session too", () => {
+    const [a] = parse("Final exam – Session 30 (15 December) – 40%");
+    expect(a).toMatchObject({ dueDate: "2026-12-15", sessionRef: 30 });
+  });
+
+  it("doesn't turn schedule lines into deadlines, except exams held in class", () => {
+    const items = parse("Session 4: Externalities. Problem set 2\nSession 15: MIDTERM EXAM\nClase 5: Bienes públicos. Lectura cap. 3");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ type: "midterm", sessionRef: 15 });
+  });
+});

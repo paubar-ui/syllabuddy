@@ -39,7 +39,7 @@ function SettingsContent() {
     <main id="main" className={page}>
       <PageHeader
         title="Settings"
-        description="Make Syllabuddy fit your life: when you can study, how the coach talks to you, friends to compete with, and your data."
+        description="Make Syllabuddy fit your life: when you can study, how the coach talks to you, and your data."
         action={
           <Link href="/about" className="text-sm font-medium text-muted underline underline-offset-2 hover:text-ink">
             About Syllabuddy

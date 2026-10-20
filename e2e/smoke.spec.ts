@@ -341,3 +341,65 @@ test("exam prep plan and session detail: what to study each day, from the syllab
   await expect(page.getByTestId("points-count")).not.toHaveText("0");
   expect(errors).toEqual([]);
 });
+
+test("Blackboard calendar: upload, match courses, and “Session N” becomes a real date", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await signUp(page, "calendar");
+
+  // A Blackboard-style calendar: Statistics every week from tomorrow, plus an evening class.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const local = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const first = new Date();
+  first.setDate(first.getDate() + 1);
+  const sixth = new Date(first);
+  sixth.setDate(first.getDate() + 35);
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "BEGIN:VEVENT",
+    "UID:stats@test",
+    "SUMMARY:Statistics: Class",
+    `DTSTART:${local(first)}T100000`,
+    `DTEND:${local(first)}T113000`,
+    "RRULE:FREQ=WEEKLY;COUNT=12",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:micro@test",
+    "SUMMARY:Microeconomics - Lecture",
+    `DTSTART:${local(first)}T190000`,
+    `DTEND:${local(first)}T203000`,
+    "RRULE:FREQ=WEEKLY;COUNT=10",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  await page.getByRole("link", { name: "Plan", exact: true }).filter({ visible: true }).first().click();
+  const card = page.getByTestId("calendar-card");
+  await card.getByTestId("calendar-file-input").setInputFiles({
+    name: "blackboard.ics",
+    mimeType: "text/calendar",
+    buffer: Buffer.from(ics),
+  });
+  await expect(card).toContainText("Found 22 classes in 2 courses");
+  await expect(card.getByRole("rowheader", { name: "Statistics" })).toBeVisible();
+  await expectNoAxeViolations(page, "/plan with calendar");
+
+  // A syllabus that only gives a session number
+  await page.goto("/onboarding");
+  await page.getByTestId("syllabus-input").fill("Course: Statistics\nMidterm exam – Session 6 – 30%\nFinal exam 70% 20/01/2031");
+  await page.getByTestId("extract-button").click();
+  const review = page.getByTestId("review-table");
+  await expect(review.getByLabel("Course in your Blackboard calendar")).toHaveValue("statistics");
+  await expect(review.getByLabel(/^Due date/).first()).toHaveValue(iso(sixth));
+  await expect(review).toContainText("Date from Blackboard");
+  await page.getByTestId("save-courses-button").click();
+  await page.getByTestId("generate-plan-button").click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByTestId("core-item")).toHaveCount(2);
+
+  // The match is remembered on Plan
+  await page.getByRole("link", { name: "Plan", exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByLabel("Syllabuddy course for Statistics")).toHaveValue(/.+/);
+  expect(errors).toEqual([]);
+});

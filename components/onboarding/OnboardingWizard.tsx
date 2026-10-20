@@ -1,11 +1,14 @@
 "use client";
 // Onboarding: 1) paste/upload a syllabus → 2) review what we found → 3) effort & target grades
 // → 4) weekly free time → generate the plan. Nothing is saved until the very last button.
+import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { guessMapping } from "@/lib/blackboard";
 import { todayISO } from "@/lib/dates";
 import {
+  applyCalendarToDrafts,
   draftFromExtraction,
   draftsToStore,
   emptyCourse,
@@ -51,6 +54,14 @@ const TYPE_LABELS: Record<(typeof DELIVERABLE_TYPES)[number], string> = {
 export function OnboardingWizard() {
   const [step, setStep] = useState<Step>(1);
   const [drafts, setDrafts] = useState<DraftCourse[]>([]);
+  const calendar = useStore((s) => s.calendar);
+  // Connected Blackboard calendar: match the new course and fill in "Session N" dates.
+  const withCalendar = (draft: DraftCourse): DraftCourse => {
+    if (!calendar?.courses.length) return draft;
+    const mapping = guessMapping(calendar.courses, [{ id: draft.id, name: draft.name }]);
+    const calendarKey = Object.keys(mapping).find((k) => mapping[k] === draft.id);
+    return calendarKey ? applyCalendarToDrafts([{ ...draft, calendarKey }], calendar.courses)[0] : draft;
+  };
   const [notice, setNotice] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRender = useRef(true);
@@ -99,7 +110,7 @@ export function OnboardingWizard() {
             headingRef={headingRef}
             courseCount={drafts.length}
             onDone={(draft, message) => {
-              setDrafts((ds) => [...ds, draft]);
+              setDrafts((ds) => [...ds, withCalendar(draft)]);
               setNotice(message);
               setStep(2);
             }}
@@ -236,6 +247,12 @@ function StepSyllabus({
     if (missingDates > 0) {
       message += ` ${missingDates} ${missingDates === 1 ? "has" : "have"} no date yet (highlighted in red).`;
     }
+    const sessionOnly = result.deliverables.filter((d) => !d.dueDate && d.sessionRef).length;
+    if (sessionOnly > 0) {
+      message += useStore.getState().calendar
+        ? " Dates given as session numbers (“Session 15”) are filled in from your Blackboard calendar where we could match the course."
+        : " Some deadlines are given as session numbers (“Session 15”) — connect your Blackboard calendar on Plan to turn them into dates automatically.";
+    }
     if (!useAi && offline.unresolvedWeeks) {
       message += " Some deadlines are given as week numbers — add the semester start date to turn them into dates.";
     }
@@ -363,6 +380,7 @@ function StepReview({
   onNext: () => void;
 }) {
   const [problems, setProblems] = useState<DraftProblem[]>([]);
+  const calendar = useStore((s) => s.calendar);
   const summaryRef = useRef<HTMLDivElement>(null);
 
   const updateCourse = (id: string, patch: Partial<DraftCourse>) =>
@@ -452,6 +470,34 @@ function StepReview({
                   Remove course
                 </button>
               </div>
+              {calendar && calendar.courses.length > 0 && (
+                <div className="mt-3 sm:w-2/3">
+                  <label htmlFor={`bb-${course.id}`} className={label}>
+                    Course in your Blackboard calendar
+                  </label>
+                  <select
+                    id={`bb-${course.id}`}
+                    className={input}
+                    value={course.calendarKey ?? ""}
+                    onChange={(e) =>
+                      setDrafts((ds) =>
+                        applyCalendarToDrafts(
+                          ds.map((d) => (d.id === course.id ? { ...d, calendarKey: e.target.value || undefined } : d)),
+                          calendar.courses,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">Not in Blackboard</option>
+                    {calendar.courses.map((cc) => (
+                      <option key={cc.key} value={cc.key}>
+                        {cc.name} ({cc.sessions.length} classes)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted">Used to turn “Session 15” into the date of that class.</p>
+                </div>
+              )}
               {course.attendancePolicy && (
                 <p className="mt-3 text-sm text-muted">
                   <span className="font-medium text-ink">Attendance: </span>
@@ -546,8 +592,18 @@ function StepReview({
                           className={`${input} ${missingDate ? "border-danger" : ""}`}
                           value={item.dueDate}
                           aria-invalid={missingDate}
-                          onChange={(e) => updateItem(course.id, item.id, { dueDate: e.target.value })}
+                          onChange={(e) =>
+                            updateItem(course.id, item.id, { dueDate: e.target.value, dateFromCalendar: false })
+                          }
+                          aria-describedby={item.sessionRef ? `date-src-${item.id}` : undefined}
                         />
+                        {item.sessionRef && (
+                          <p id={`date-src-${item.id}`} className="mt-1 text-xs text-muted">
+                            {item.dateFromCalendar && item.dueDate
+                              ? `Date from Blackboard: ${format(parseISO(item.dueDate), "EEE d MMM")} (session ${item.sessionRef})`
+                              : `Syllabus says session ${item.sessionRef}`}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label htmlFor={`weight-${item.id}`} className={label}>
@@ -686,6 +742,7 @@ function StepAvailability({
     const store = useStore.getState();
     const { courses, deliverables } = draftsToStore(drafts);
     store.setCourses(courses, deliverables);
+    for (const d of drafts) if (d.calendarKey) store.setCalendarMapping(d.calendarKey, d.id);
     store.setAvailability(parsed.availability);
     store.generatePlan();
     router.push("/app");

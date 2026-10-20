@@ -178,6 +178,16 @@ describe("generateSchedule", () => {
     expect(warnings).toHaveLength(1);
   });
 
+  it("keeps study blocks out of evening class time", () => {
+    const d = deliverable(4, 3);
+    const { blocks } = generateSchedule({
+      courses: [course], deliverables: [d], availability: every(120), today: TODAY,
+      busyMinutes: { [day(1)]: 90, [day(2)]: 200 },
+    });
+    expect(minutesByDate(blocks).get(day(1)) ?? 0).toBeLessThanOrEqual(30);
+    expect(minutesByDate(blocks).get(day(2))).toBeUndefined();
+  });
+
   it("serves the earliest deadline first, ties go to the higher weight", () => {
     const later = deliverable(2, 3);
     const lowWeight = deliverable(2, 2, { weight: 10 });

@@ -34,6 +34,9 @@ const TYPE_RULES: [DeliverableType, RegExp][] = [
   ["reading", /\b(readings?|lecturas?)\b/i],
 ];
 
+const SESSION_HEADER = /^\s*(?:sessions?|sesi[oó]n|clases?|class|lecture|S)\s*#?\s*\d{1,2}\s*[:.)\-–—]/i;
+const IN_CLASS_TYPES = new Set<DeliverableType>(["exam", "midterm", "final", "quiz", "presentation"]);
+
 const NOT_A_DELIVERABLE = /\b(participation|participaci[oó]n|attendance|asistencia|office hours|tutor[ií]as?)\b/i;
 
 export function detectType(line: string): DeliverableType | null {
@@ -68,7 +71,7 @@ const MONTH_INDEX: Record<string, number> = {
 const monthFromWord = (word: string) => MONTH_INDEX[word.toLowerCase().slice(0, 3)];
 
 const ORD = "(?:st|nd|rd|th|º|°)?";
-const DATE_PATTERNS: { re: RegExp; kind: "iso" | "dayMonth" | "monthDay" | "numeric" | "week" }[] = [
+const DATE_PATTERNS: { re: RegExp; kind: "iso" | "dayMonth" | "monthDay" | "numeric" | "week" | "session" }[] = [
   { kind: "iso", re: /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g },
   {
     kind: "dayMonth",
@@ -77,13 +80,17 @@ const DATE_PATTERNS: { re: RegExp; kind: "iso" | "dayMonth" | "monthDay" | "nume
   { kind: "monthDay", re: new RegExp(`\\b${MONTH}\\s+(\\d{1,2})${ORD}\\b(?:,?\\s+(\\d{4}))?`, "gi") },
   { kind: "numeric", re: /\b(\d{1,2})([/.-])(\d{1,2})(?:\2(\d{4}|\d{2}))?\b/g },
   { kind: "week", re: /\b(?:week|semana|wk)\.?\s*(\d{1,2})\b/gi },
+  // "Session 15" / "Sesión 15" / "Clase 15" / "S15": the date comes from the Blackboard calendar (V2-3).
+  { kind: "session", re: /\b(?:sessions?|sesi[oó]n(?:es)?|clases?|class|lecture)\s*(?:n[º°o.]?\s*)?#?\s*(\d{1,2})\b/gi },
+  { kind: "session", re: /\bS(\d{1,2})\b/g },
 ];
 
 interface DateMatch {
-  iso: string | null; // null for a week we couldn't resolve
+  iso: string | null; // null for a week we couldn't resolve, and for sessions
   start: number;
   end: number;
   isWeek: boolean;
+  session?: number; // "Session 15"
 }
 
 function makeISO(year: number, month: number, day: number): string | null {
@@ -133,6 +140,10 @@ export function findDates(line: string, opts: ParseOptions): DateMatch[] {
         } else {
           iso = withInferredYear(month - 1, day, opts.today);
         }
+      } else if (kind === "session") {
+        const session = Number(m[1]);
+        if (session >= 1 && session <= 60) found.push({ iso: null, start, end, isWeek: false, session });
+        continue;
       } else {
         const week = Number(m[1]);
         if (week < 1 || week > 30) continue;
@@ -260,20 +271,24 @@ export function parseSyllabus(text: string, opts: ParseOptions): ParsedSyllabus 
     const type = detectType(part);
     if (!type) return;
 
-    const ownDates = findDates(part, dateOpts);
+    // In a schedule line ("Session 4: Externalities. PS2") the session is when the class is,
+    // not a due date — except for things that happen in class, like exams and presentations.
+    const scheduleLine = SESSION_HEADER.test(part) && !IN_CLASS_TYPES.has(type);
+    const ownDates = findDates(part, dateOpts).filter((d) => !(scheduleLine && d.session));
     const ownWeight = findWeight(blank(part, ownDates));
     let dates = ownDates;
     let weight = ownWeight?.value ?? null;
     // "Final exam" on one line, "Date: 15 Dec · 40%" on the next ones.
     for (let j = i + 1; j <= i + 2 && j < parts.length && (!dates.length || weight === null); j++) {
       if (detectType(parts[j])) break;
-      const nextDates = findDates(parts[j], dateOpts);
+      const nextDates = findDates(parts[j], dateOpts).filter((d) => !(SESSION_HEADER.test(parts[j]) && d.session));
       if (!dates.length) dates = nextDates;
       weight ??= findWeight(blank(parts[j], nextDates))?.value ?? null;
     }
     if (!dates.length && weight === null) return;
 
-    const date = dates.find((d) => d.iso) ?? dates[0];
+    const date = dates.find((d) => d.iso) ?? dates.find((d) => !d.session) ?? dates[0];
+    const sessionRef = dates.find((d) => d.session)?.session;
     if (date?.isWeek && !date.iso) unresolvedWeeks = true;
 
     // Only cut text that was found on this line itself.
@@ -283,6 +298,7 @@ export function parseSyllabus(text: string, opts: ParseOptions): ParsedSyllabus 
       type,
       dueDate: date?.iso ?? null,
       weight,
+      ...(sessionRef ? { sessionRef } : {}),
     };
     const key = `${item.type}|${item.dueDate}|${item.weight}|${item.title.toLowerCase()}`;
     if (seen.has(key)) return;

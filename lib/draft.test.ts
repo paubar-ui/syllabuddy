@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCalendarToDrafts,
   draftFromExtraction,
   draftsToStore,
   emptyCourse,
@@ -86,5 +87,34 @@ describe("draftsToStore", () => {
     expect(courses[0]).toMatchObject({ id: c.id, name: "Stats", effort: 4, targetGrade: 8.5, gradeScale: 10 });
     expect(deliverables).toHaveLength(2);
     expect(deliverables[0]).toMatchObject({ courseId: c.id, weight: 40, loggedMinutes: 0, done: false });
+  });
+});
+
+describe("applyCalendarToDrafts", () => {
+  const cc = {
+    key: "stats",
+    name: "Statistics",
+    sessions: [1, 2, 3].map((n) => ({ number: n, date: `2026-11-0${n}`, start: "10:00", end: "11:30" })),
+  };
+  const draft = {
+    ...emptyCourse(0, () => "c1"),
+    calendarKey: "stats",
+    items: [
+      { id: "a", title: "Midterm", type: "midterm" as const, dueDate: "", weight: "30", sessionRef: 2 },
+      { id: "b", title: "Quiz", type: "quiz" as const, dueDate: "2026-12-01", weight: "10", sessionRef: 3 },
+      { id: "c", title: "Final", type: "final" as const, dueDate: "", weight: "60", sessionRef: 9 },
+    ],
+  };
+
+  it("fills session dates, keeps typed dates, leaves unknown sessions empty", () => {
+    const [d] = applyCalendarToDrafts([draft], [cc]);
+    expect(d.items.map((i) => i.dueDate)).toEqual(["2026-11-02", "2026-12-01", ""]);
+    expect(d.items[0].dateFromCalendar).toBe(true);
+  });
+
+  it("clears calendar dates when the course is unmatched", () => {
+    const [filled] = applyCalendarToDrafts([draft], [cc]);
+    const [d] = applyCalendarToDrafts([{ ...filled, calendarKey: undefined }], [cc]);
+    expect(d.items[0].dueDate).toBe("");
   });
 });

@@ -2,6 +2,7 @@
 // lib/planSync.ts (grading contract: no user data in localStorage).
 import { create } from "zustand";
 import type { BackupData } from "./backup";
+import { applyCalendar, busyMinutesByDate, guessMapping } from "./blackboard";
 import { addDaysISO, todayISO } from "./dates";
 import { COURSE_COLORS } from "./draft";
 import { newId } from "./id";
@@ -23,6 +24,7 @@ import { emptyPace, updatePace } from "./pace";
 import { generateSchedule } from "./scheduler";
 import type {
   Availability,
+  CalendarSync,
   Course,
   CourseSession,
   Deliverable,
@@ -55,6 +57,8 @@ export interface Data {
   taskChecks: Record<string, string[]>;
   /** Session-detail notes, per study block. */
   blockNotes: Record<string, string>;
+  /** The connected Blackboard calendar (V2-3), or null. */
+  calendar: CalendarSync | null;
 }
 
 interface Actions {
@@ -95,6 +99,13 @@ interface Actions {
   moveBlock: (blockId: string, date: string, today?: string) => void;
   updateExam: (deliverableId: string, patch: Partial<ExamDetails>) => void;
   setCourseSessions: (courseId: string, sessions: CourseSession[]) => void;
+  /** Saves a freshly read Blackboard calendar, matches its courses and replans. */
+  setCalendar: (calendar: Omit<CalendarSync, "mapping" | "error">, today?: string) => void;
+  /** "This Blackboard course is that Syllabuddy course" ("" = none). */
+  setCalendarMapping: (key: string, courseId: string, today?: string) => void;
+  /** A re-sync failed: keep the last good data and show a friendly message. */
+  setCalendarError: (message: string) => void;
+  disconnectCalendar: (today?: string) => void;
   reset: () => void;
 }
 
@@ -123,6 +134,7 @@ const DATA_KEYS = [
   "displayName",
   "taskChecks",
   "blockNotes",
+  "calendar",
 ] as const satisfies readonly (keyof Data)[];
 
 /** Just the data (no functions) — this is what gets saved to your account. */
@@ -145,6 +157,7 @@ const initialData = (): Data => ({
   displayName: "",
   taskChecks: {},
   blockNotes: {},
+  calendar: null,
 });
 
 export const useStore = create<SyllabuddyState>()(
@@ -189,6 +202,30 @@ export const useStore = create<SyllabuddyState>()(
         return { deliverables, gamification };
       };
 
+      /**
+       * Keeps the Blackboard calendar in step with your courses: matches new or unmatched courses,
+       * forgets deleted ones, and puts "Session N" dates in place.
+       */
+      const syncCalendar = () => {
+        const s = get();
+        if (!s.calendar) return;
+        const ids = new Set(s.courses.map((c) => c.id));
+        const guess = guessMapping(s.calendar.courses, s.courses);
+        const kept = Object.fromEntries(
+          Object.entries(s.calendar.mapping).filter(([key, id]) => id && ids.has(id) && guess[key] !== undefined),
+        );
+        const taken = new Set(Object.values(kept));
+        const mapping = Object.fromEntries(
+          s.calendar.courses.map((cc) => [
+            cc.key,
+            kept[cc.key] ?? (guess[cc.key] && !taken.has(guess[cc.key]) ? guess[cc.key] : ""),
+          ]),
+        );
+        const calendar = { ...s.calendar, mapping };
+        const applied = applyCalendar(calendar, s.courses, s.deliverables);
+        set({ calendar, ...(applied ?? {}) });
+      };
+
       return {
         ...initialData(),
 
@@ -202,11 +239,13 @@ export const useStore = create<SyllabuddyState>()(
             availability: DEMO_AVAILABILITY,
             gamification: { ...initialGamification(), mascotTone: tone },
             isDemo: true,
+            calendar: get().calendar ? { ...get().calendar!, mapping: {} } : null,
           });
+          syncCalendar();
           get().generatePlan(today);
         },
 
-        setCourses: (courses, deliverables) =>
+        setCourses: (courses, deliverables) => {
           set((s) => ({
             courses,
             deliverables: deliverables.map((d) => ({ ...d, estimatedHours: estimateFor(d, courses) })),
@@ -219,7 +258,9 @@ export const useStore = create<SyllabuddyState>()(
             gamification: s.isDemo
               ? { ...initialGamification(), mascotTone: s.gamification.mascotTone }
               : s.gamification,
-          })),
+          }));
+          syncCalendar();
+        },
 
         updateCourse: (id, patch) =>
           set((s) => {
@@ -242,13 +283,14 @@ export const useStore = create<SyllabuddyState>()(
         setAvailability: (availability) => set({ availability }),
 
         generatePlan: (today = todayISO()) => {
-          const { courses, deliverables, availability, blocks } = get();
+          const { courses, deliverables, availability, blocks, calendar } = get();
           const result = generateSchedule({
             courses,
             deliverables,
             availability,
             today,
             existingBlocks: blocks,
+            busyMinutes: busyMinutesByDate(calendar),
           });
           set({ blocks: result.blocks, warnings: result.warnings });
         },
@@ -333,14 +375,18 @@ export const useStore = create<SyllabuddyState>()(
           get().generatePlan(today);
         },
 
-        importData: (data) =>
+        importData: (data) => {
           set({
             ...initialData(),
             ...data,
             // A running timer or old replan notice doesn't make sense after an import.
             timer: null,
             lastReplan: null,
-          }),
+            // Backups never contain the calendar link: keep the one that's connected.
+            calendar: get().calendar,
+          });
+          syncCalendar();
+        },
 
         settleDays: (today = todayISO()) =>
           set((s) => ({ gamification: settleMissedDays(s.gamification, s.blocks, today) })),
@@ -377,8 +423,36 @@ export const useStore = create<SyllabuddyState>()(
             ),
           })),
 
-        setCourseSessions: (courseId, sessions) =>
-          set((s) => ({ courses: s.courses.map((c) => (c.id === courseId ? { ...c, sessions } : c)) })),
+        setCalendar: (calendar, today = todayISO()) => {
+          set((s) => ({ calendar: { ...calendar, mapping: s.calendar?.mapping ?? {}, error: undefined } }));
+          syncCalendar();
+          get().generatePlan(today);
+        },
+
+        setCalendarMapping: (key, courseId, today = todayISO()) => {
+          const s = get();
+          if (!s.calendar) return;
+          // One Blackboard course per Syllabuddy course: picking it here frees it elsewhere.
+          const mapping = Object.fromEntries(
+            Object.entries(s.calendar.mapping).map(([k, id]) => [k, k === key ? courseId : id === courseId ? "" : id]),
+          );
+          const calendar = { ...s.calendar, mapping };
+          set({ calendar, ...(applyCalendar(calendar, s.courses, s.deliverables) ?? {}) });
+          get().generatePlan(today);
+        },
+
+        setCalendarError: (message) =>
+          set((s) => (s.calendar ? { calendar: { ...s.calendar, error: message } } : {})),
+
+        disconnectCalendar: (today = todayISO()) => {
+          set({ calendar: null });
+          get().generatePlan(today);
+        },
+
+        setCourseSessions: (courseId, sessions) => {
+          set((s) => ({ courses: s.courses.map((c) => (c.id === courseId ? { ...c, sessions } : c)) }));
+          syncCalendar();
+        },
 
         setMascotTone: (mascotTone) =>
           set((s) => ({ gamification: { ...s.gamification, mascotTone } })),
@@ -391,6 +465,11 @@ export const useStore = create<SyllabuddyState>()(
             const v = data?.[k];
             if (v === undefined) continue;
             const expected = base[k];
+            if (k === "calendar") {
+              const c = v as Partial<CalendarSync> | null;
+              if (c === null || (Array.isArray(c?.courses) && typeof c?.mapping === "object")) clean.calendar = c as CalendarSync | null;
+              continue;
+            }
             if (Array.isArray(expected) ? Array.isArray(v) : typeof v === typeof expected || expected === null) {
               (clean as Record<string, unknown>)[k] = v;
             }
