@@ -61,7 +61,7 @@ export async function resync(): Promise<SyncResult> {
     useStore
       .getState()
       .setCalendarError(
-        `Your Blackboard calendar link stopped working (${result.message}) Paste a fresh link on Plan.`,
+        `Your Blackboard calendar link stopped working (${result.message}) Paste a fresh link in Settings.`,
       );
   }
   return result;

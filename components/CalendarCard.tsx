@@ -1,7 +1,9 @@
 "use client";
-// Plan → Blackboard calendar (V2-3): connect with the calendar's share link (or upload an
-// .ics file), match Blackboard courses to your courses, re-sync, disconnect.
+// Blackboard calendar (V2-3): connect with the calendar's share link (or upload an .ics file),
+// match Blackboard courses to your courses, re-sync, disconnect.
+// On Plan it only shows until you're connected; after that it lives in Settings.
 import { format, parseISO } from "date-fns";
+import Link from "next/link";
 import { useState } from "react";
 import { Callout, HowItWorks } from "@/components/kit";
 import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
@@ -11,7 +13,7 @@ import { useStore } from "@/lib/store";
 const describe = (r: Extract<SyncResult, { ok: true }>) =>
   `Found ${r.sessions} classes in ${r.courses} course${r.courses === 1 ? "" : "s"}. Check the matches below.`;
 
-export function CalendarCard() {
+export function CalendarCard({ where = "settings" }: { where?: "plan" | "settings" }) {
   const calendar = useStore((s) => s.calendar);
   const courses = useStore((s) => s.courses);
   const setCalendarMapping = useStore((s) => s.setCalendarMapping);
@@ -20,6 +22,7 @@ export function CalendarCard() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [replacing, setReplacing] = useState(false);
+  const [justConnected, setJustConnected] = useState(false);
 
   async function run(task: () => Promise<SyncResult>) {
     setBusy(true);
@@ -28,6 +31,7 @@ export function CalendarCard() {
     setBusy(false);
     setStatus(result.ok ? { ok: true, text: describe(result) } : { ok: false, text: result.message });
     if (result.ok) {
+      setJustConnected(true);
       setLink("");
       setReplacing(false);
     }
@@ -35,6 +39,43 @@ export function CalendarCard() {
 
   const connected = Boolean(calendar);
   const showForm = !connected || replacing;
+
+  // On Plan, a connected calendar steps aside: a short confirmation right after connecting,
+  // a warning if the link stops working, and otherwise nothing (it's managed in Settings).
+  if (where === "plan" && connected) {
+    if (justConnected && status?.ok) {
+      return (
+        <Callout
+          tone="success"
+          role="status"
+          title="Blackboard calendar connected"
+          action={
+            <Link href="/settings#calendar-title" className={buttonSecondary}>
+              Check the courses
+            </Link>
+          }
+        >
+          {status.text.replace(" below.", " in Settings.")} You can re-sync or disconnect it there too.
+        </Callout>
+      );
+    }
+    if (calendar?.error) {
+      return (
+        <Callout
+          tone="warn"
+          title="Couldn't refresh your Blackboard calendar"
+          action={
+            <Link href="/settings#calendar-title" className={buttonSecondary}>
+              Fix it in Settings
+            </Link>
+          }
+        >
+          {calendar.error}
+        </Callout>
+      );
+    }
+    return null;
+  }
 
   return (
     <section aria-labelledby="calendar-title" data-testid="calendar-card" className={card}>

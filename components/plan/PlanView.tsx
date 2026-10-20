@@ -4,7 +4,7 @@ import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SessionDetail } from "@/components/SessionDetail";
-import { CalendarCard } from "@/components/plan/CalendarCard";
+import { CalendarCard } from "@/components/CalendarCard";
 import { Callout, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
 import { buttonPrimary, buttonSecondary, card, pageWide } from "@/components/ui";
 import { addDaysISO, todayISO } from "@/lib/dates";
@@ -73,7 +73,7 @@ function PlanContent() {
           Add your first deadline on Today (or a whole syllabus) and your week will fill in here automatically.
         </EmptyState>
         <div className="mt-6">
-          <CalendarCard />
+          <CalendarCard where="plan" />
         </div>
       </main>
     );
@@ -118,9 +118,7 @@ function PlanContent() {
           {exported}
         </Callout>
       )}
-      <div className="mb-8">
-        <CalendarCard />
-      </div>
+      <CalendarSlot />
 
       {/* ---------------- Week view ---------------- */}
       <section aria-labelledby="week-title">
@@ -330,5 +328,14 @@ function PlanContent() {
       </div>
       <SessionDetail blockId={detailId} today={today} onClose={() => setDetailId(null)} />
     </main>
+  );
+}
+
+/** The Blackboard card on Plan, with spacing only when there's something to show. */
+function CalendarSlot() {
+  return (
+    <div className="mb-8 empty:hidden">
+      <CalendarCard where="plan" />
+    </div>
   );
 }

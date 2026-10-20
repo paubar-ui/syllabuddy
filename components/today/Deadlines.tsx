@@ -2,9 +2,10 @@
 // The main feature on /app (grading contract): add a deadline by typing its title, and see every
 // deadline you've saved. Typing only the title works — date, course and weight get defaults.
 import { format, parseISO } from "date-fns";
+import Link from "next/link";
 import { useState } from "react";
 import { create } from "zustand";
-import { EmptyState, SectionHeader } from "@/components/kit";
+import { CourseDot, EmptyState, SectionHeader } from "@/components/kit";
 import { buttonPrimary, input, label } from "@/components/ui";
 import { addDaysISO, daysBetween, describeDaysAway } from "@/lib/dates";
 import { newId } from "@/lib/id";
@@ -158,92 +159,152 @@ export function DeadlineList({ today }: { today: string }) {
   const courses = useStore((s) => s.courses);
   const deliverables = useStore((s) => s.deliverables);
   const removeDeliverable = useStore((s) => s.removeDeliverable);
+  const setDeliverableDone = useStore((s) => s.setDeliverableDone);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [finished, setFinished] = useState("");
   const savingIds = useSaving((s) => s.ids);
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
   const courseColor = new Map(courses.map((c) => [c.id, c.color]));
 
+  // Finished deadlines leave the table (you can still see and reopen them on Courses).
   const items = deliverables
-    .filter((d) => !savingIds.includes(d.id))
-    .sort((a, b) => Number(a.done) - Number(b.done) || a.dueDate.localeCompare(b.dueDate));
+    .filter((d) => !savingIds.includes(d.id) && !d.done)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const doneCount = deliverables.filter((d) => d.done).length;
 
   return (
     <section aria-labelledby="deadlines-title" className="mt-8">
       <SectionHeader
         id="deadlines-title"
         title="Your deadlines"
-        hint="Everything you've added, soonest first. Your plan is rebuilt automatically when you add or delete one."
+        hint="What's still to do, soonest first. Tick one when it's finished: it leaves the list and you get 50 points."
       />
       {items.length === 0 ? (
-        <EmptyState title="No deadlines yet">Add your first one in the box above — it takes five seconds.</EmptyState>
+        doneCount > 0 ? (
+          <EmptyState title="All done!">Every deadline is finished. Add a new one in the box above.</EmptyState>
+        ) : (
+          <EmptyState title="No deadlines yet">Add your first one in the box above — it takes five seconds.</EmptyState>
+        )
       ) : (
-        <ul className="space-y-2">
-          {items.map((d) => {
-            const days = daysBetween(today, d.dueDate);
-            const soon = !d.done && days >= 0 && days <= 3;
-            return (
-              <li
-                key={d.id}
-                data-testid="core-item"
-                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3"
-                style={{ borderLeft: `4px solid ${courseColor.get(d.courseId) ?? "var(--line)"}` }}
-              >
-                <span className="min-w-0">
-                  <span className={`block font-medium break-words ${d.done ? "text-muted line-through" : ""}`}>
-                    {d.title}
-                  </span>
-                  <span className="block text-sm text-muted">
-                    {courseName.get(d.courseId)} · due {format(parseISO(d.dueDate), "EEE d MMM")} · {d.weight}%
-                    {d.done && " · done"}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  {soon && (
-                    <span
-                      className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                        days <= 1
-                          ? "border-danger-line bg-danger-soft text-danger"
-                          : "border-warn-line bg-warn-bg text-warn-ink"
-                      }`}
-                    >
-                      Due {describeDaysAway(days)}
-                    </span>
-                  )}
-                  {confirmId === d.id ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          removeDeliverable(d.id, today);
-                          setConfirmId(null);
+        <div className="overflow-hidden rounded-xl border border-line bg-surface">
+          <table className="w-full table-fixed text-left text-sm">
+            <caption className="sr-only">Your deadlines, soonest first</caption>
+            <thead className="border-b border-line bg-surface-2 text-xs text-muted">
+              <tr>
+                <th scope="col" className="w-10 py-2 pl-3 font-medium sm:pl-4">
+                  <span className="sr-only">Finished</span>
+                </th>
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Deadline
+                </th>
+                <th scope="col" className="hidden w-40 px-3 py-2 font-medium sm:table-cell">
+                  Course
+                </th>
+                <th scope="col" className="w-24 px-3 py-2 font-medium sm:w-28">
+                  Due
+                </th>
+                <th scope="col" className="hidden w-20 px-3 py-2 text-right font-medium sm:table-cell">
+                  Weight
+                </th>
+                <th scope="col" className="w-20 px-2 py-2 font-medium sm:w-32">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {items.map((d) => {
+                const days = daysBetween(today, d.dueDate);
+                const soon = !d.done && days >= 0 && days <= 3;
+                const color = courseColor.get(d.courseId);
+                return (
+                  <tr key={d.id} data-testid="core-item" className="align-top">
+                    <td className="py-3 pl-3 sm:pl-4">
+                      <input
+                        type="checkbox"
+                        aria-label={`Mark ${d.title} as finished`}
+                        data-testid={`finish-${d.id}`}
+                        checked={false}
+                        onChange={() => {
+                          setDeliverableDone(d.id, true, today);
+                          setFinished(`${d.title} finished — +50 points! It's moved off this list.`);
                         }}
-                        className="rounded-md bg-danger px-2.5 py-1 text-sm font-semibold text-surface"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmId(null)}
-                        className="text-sm text-muted underline"
-                      >
-                        Keep
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={`Delete ${d.title}`}
-                      onClick={() => setConfirmId(d.id)}
-                      className="rounded-md px-2 py-1 text-lg leading-none text-muted hover:bg-surface-2 hover:text-ink"
-                    >
-                      ×
-                    </button>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                        className="mt-0.5 h-5 w-5 cursor-pointer accent-[var(--success)]"
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="block font-medium break-words">{d.title}</span>
+                      {/* On phones the course and weight move under the title. */}
+                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted sm:hidden">
+                        <CourseDot color={color} />
+                        {courseName.get(d.courseId)} · {d.weight}%
+                      </span>
+                    </td>
+                    <td className="hidden px-3 py-3 text-muted sm:table-cell">
+                      <span className="flex items-center gap-1.5">
+                        <CourseDot color={color} />
+                        <span className="min-w-0 break-words">{courseName.get(d.courseId)}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 tabular-nums">
+                      {format(parseISO(d.dueDate), "EEE d MMM")}
+                      {soon && (
+                        <span
+                          className={`mt-1 block w-fit rounded-md border px-1.5 py-0.5 text-xs font-semibold ${
+                            days <= 1
+                              ? "border-danger-line bg-danger-soft text-danger"
+                              : "border-warn-line bg-warn-bg text-warn-ink"
+                          }`}
+                        >
+                          {describeDaysAway(days)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="hidden px-3 py-3 text-right tabular-nums sm:table-cell">{d.weight}%</td>
+                    <td className="px-2 py-2.5 text-right">
+                      {confirmId === d.id ? (
+                        <span className="inline-flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeDeliverable(d.id, today);
+                              setConfirmId(null);
+                            }}
+                            className="rounded-md bg-danger px-2.5 py-1 text-sm font-semibold text-surface"
+                          >
+                            Delete
+                          </button>
+                          <button type="button" onClick={() => setConfirmId(null)} className="text-sm text-muted underline">
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`Delete ${d.title}`}
+                          onClick={() => setConfirmId(d.id)}
+                          className="rounded-md px-2 py-1 text-lg leading-none text-muted hover:bg-surface-2 hover:text-ink"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p aria-live="polite" className="mt-2 text-sm text-success">
+        {finished}
+      </p>
+      {doneCount > 0 && (
+        <p className="mt-1 text-xs text-muted">
+          {doneCount} finished deadline{doneCount === 1 ? "" : "s"} hidden.{" "}
+          <Link href="/courses" className="font-medium underline underline-offset-2 hover:no-underline">
+            See them on Courses
+          </Link>
+        </p>
       )}
     </section>
   );

@@ -381,9 +381,15 @@ test("Blackboard calendar: upload, match courses, and “Session N” becomes a 
     mimeType: "text/calendar",
     buffer: Buffer.from(ics),
   });
-  await expect(card).toContainText("Found 22 classes in 2 courses");
-  await expect(card.getByRole("rowheader", { name: "Statistics" })).toBeVisible();
-  await expectNoAxeViolations(page, "/plan with calendar");
+  // Once connected, Plan only confirms it; the details live in Settings.
+  await expect(page.getByText("Blackboard calendar connected")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Found 22 classes in 2 courses" })).toBeVisible();
+  await expectNoAxeViolations(page, "/plan after connecting");
+  await page.getByRole("link", { name: "Check the courses" }).click();
+  await expect(page.getByTestId("calendar-card").getByRole("rowheader", { name: "Statistics" })).toBeVisible();
+  await expectNoAxeViolations(page, "/settings with calendar");
+  await page.getByRole("link", { name: "Plan", exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId("calendar-card")).toHaveCount(0);
 
   // A syllabus that only gives a session number
   await page.goto("/onboarding");
@@ -398,8 +404,13 @@ test("Blackboard calendar: upload, match courses, and “Session N” becomes a 
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByTestId("core-item")).toHaveCount(2);
 
-  // The match is remembered on Plan
-  await page.getByRole("link", { name: "Plan", exact: true }).filter({ visible: true }).first().click();
+  // A finished deadline leaves the table
+  await page.getByRole("checkbox", { name: "Mark Midterm exam as finished" }).click();
+  await expect(page.getByTestId("core-item")).toHaveCount(1);
+  await expect(page.getByText("1 finished deadline hidden.")).toBeVisible();
+
+  // The match is remembered in Settings
+  await page.getByRole("link", { name: "Settings" }).filter({ visible: true }).first().click();
   await expect(page.getByLabel("Syllabuddy course for Statistics")).toHaveValue(/.+/);
   expect(errors).toEqual([]);
 });
