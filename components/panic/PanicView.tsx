@@ -66,7 +66,7 @@ function PanicContent() {
 
   return (
     <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/today" className={`${buttonLink} text-sm`}>
+      <Link href="/app" className={`${buttonLink} text-sm`}>
         ← Back to today
       </Link>
       <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Panic mode</h1>

@@ -67,7 +67,7 @@ export function OnboardingWizard() {
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 
   return (
-    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-10">
+    <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 sm:py-10 md:pb-10">
       <p className="text-sm font-semibold uppercase tracking-wider text-accent">Set up your semester</p>
       <ol className="mt-3 grid grid-cols-4 gap-2" aria-label="Progress">
         {STEPS.map((name, i) => {
@@ -715,7 +715,7 @@ function StepAvailability({
     store.setCourses(courses, deliverables);
     store.setAvailability(parsed.availability);
     store.generatePlan();
-    router.push("/today");
+    router.push("/app");
   }
 
   return (

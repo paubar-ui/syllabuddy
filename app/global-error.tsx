@@ -31,7 +31,7 @@ export default function GlobalError({ retry }: { error: unknown; retry: () => vo
         `}</style>
         <main>
           <h1 style={{ fontSize: 28 }}>Oops — Syllabuddy hit a snag</h1>
-          <p>Your plan is still saved in this browser. Please try again.</p>
+          <p>Your plan is safe in your account. Please try again.</p>
           <button type="button" onClick={() => retry()}>
             Try again
           </button>

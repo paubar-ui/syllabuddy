@@ -1,43 +1,14 @@
-// Study Buddies: the only part of Syllabuddy that talks to a server (Supabase).
-// It sends a display name and weekly aggregates (points, streak, minutes) — nothing else.
-// Without the two NEXT_PUBLIC_SUPABASE_* variables, everything here is switched off.
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+// Study Buddies: the leaderboard with friends. It shares a display name and weekly aggregates
+// (points, streak, minutes) — never courses, grades or syllabi. Uses the same account as the app.
+import { getSupabase, supabaseConfigured } from "./supabase";
 import type { LeaderboardEntry, WeeklyStats } from "./leaderboard";
 
-// NEXT_PUBLIC_ values are baked into the browser bundle at build time, so they must be
-// written out literally like this. The publishable (anon) key is safe to expose: RLS protects the data.
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export { getSupabase };
+export const buddiesConfigured = supabaseConfigured;
 
-export const buddiesConfigured = Boolean(url && key);
-
-let client: SupabaseClient | null = null;
-
-export function getSupabase(): SupabaseClient | null {
-  if (!buddiesConfigured || typeof window === "undefined") return null;
-  client ??= createClient(url!, key!, { auth: { persistSession: true, detectSessionInUrl: true } });
-  return client;
-}
-
-export async function getSession(): Promise<Session | null> {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getSession();
-  return data.session;
-}
-
-export async function sendMagicLink(email: string): Promise<string | null> {
-  const sb = getSupabase();
-  if (!sb) return "Study Buddies isn't set up on this site yet.";
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${window.location.origin}/buddies` },
-  });
-  return error ? friendly(error.message) : null;
-}
-
-export async function signOut(): Promise<void> {
-  await getSupabase()?.auth.signOut();
+async function currentUserId(): Promise<string | null> {
+  const { data } = (await getSupabase()?.auth.getSession()) ?? { data: { session: null } };
+  return data.session?.user.id ?? null;
 }
 
 export interface MyProfile {
@@ -77,11 +48,8 @@ export async function removeFriend(friendId: string): Promise<string | null> {
 }
 
 export async function deleteMyData(): Promise<string | null> {
-  const sb = getSupabase();
-  const { error } = (await sb?.rpc("delete_my_data")) ?? {};
-  if (error) return friendly(error.message);
-  await sb?.auth.signOut();
-  return null;
+  const { error } = (await getSupabase()?.rpc("delete_my_data")) ?? {};
+  return error ? friendly(error.message) : null;
 }
 
 /** Uploads this week's aggregates. Only points, streak and minutes — never courses or grades. */
@@ -104,8 +72,11 @@ export async function syncWeek(userId: string, stats: WeeklyStats): Promise<void
 /** Syncs quietly if you're signed in and have a profile; does nothing otherwise. */
 export async function syncIfSignedIn(stats: WeeklyStats): Promise<void> {
   try {
-    const session = await getSession();
-    if (session) await syncWeek(session.user.id, stats);
+    const id = await currentUserId();
+    if (!id) return;
+    // Only people who joined Study Buddies (picked a display name) share their weekly totals.
+    const { data } = (await getSupabase()?.from("profiles").select("id").eq("id", id).maybeSingle()) ?? { data: null };
+    if (data) await syncWeek(id, stats);
   } catch {
     // Offline or not set up: the next visit will try again.
   }

@@ -1,21 +1,15 @@
 "use client";
-// /buddies: weekly leaderboard with friends. Works without login (demo friends);
-// logging in (magic link) is only needed to add real friends.
-import type { Session } from "@supabase/supabase-js";
+// /buddies: weekly leaderboard with friends (points, streak, hours only), using your account.
 import { useCallback, useEffect, useState } from "react";
 import { MascotBubble } from "@/components/Tick";
 import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
 import {
   addFriend,
-  buddiesConfigured,
   deleteMyData,
-  getSupabase,
   loadLeaderboard,
   loadMyProfile,
   removeFriend,
   saveProfile,
-  sendMagicLink,
-  signOut,
   syncWeek,
   type MyProfile,
 } from "@/lib/buddies";
@@ -27,6 +21,7 @@ import {
   weeklyStats,
   type LeaderboardEntry,
 } from "@/lib/leaderboard";
+import { useSession } from "@/lib/session";
 import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/useHydrated";
 
@@ -43,167 +38,41 @@ export function BuddiesView() {
   return <BuddiesContent />;
 }
 
-type AuthState = { status: "loading" } | { status: "signedOut" } | { status: "signedIn"; session: Session };
-
 function BuddiesContent() {
-  const [auth, setAuth] = useState<AuthState>(() =>
-    buddiesConfigured ? { status: "loading" } : { status: "signedOut" },
-  );
-  // A login link that failed comes back as #error=…&error_code=otp_expired in the URL.
-  const [linkError] = useState(() => loginLinkError(window.location.hash));
-
-  useEffect(() => {
-    if (linkError) window.history.replaceState(null, "", window.location.pathname);
-  }, [linkError]);
-
-  useEffect(() => {
-    const sb = getSupabase();
-    if (!sb) return;
-    // Also picks up the session when you arrive from the magic-link email.
-    sb.auth.getSession().then(({ data }) =>
-      setAuth(data.session ? { status: "signedIn", session: data.session } : { status: "signedOut" }),
-    );
-    const { data } = sb.auth.onAuthStateChange((_event, session) =>
-      setAuth(session ? { status: "signedIn", session } : { status: "signedOut" }),
-    );
-    return () => data.subscription.unsubscribe();
-  }, []);
-
+  const user = useSession((s) => s.user);
   return (
     <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
       <h1 className="text-2xl font-bold sm:text-3xl">Study buddies</h1>
       <p className="mt-1 text-muted">
-        Compete with friends on points, streaks and hours. They never see your courses, grades or syllabi.
+        Compete with friends on points, streaks and hours. They never see your deadlines, courses or grades.
       </p>
-      {auth.status === "loading" && <p className="mt-6 text-muted">Checking your login…</p>}
-      {auth.status === "signedOut" && <SignedOut linkError={linkError} />}
-      {auth.status === "signedIn" && <SignedIn session={auth.session} />}
+      {user ? (
+        <SignedIn userId={user.id} email={user.email} />
+      ) : (
+        <p className="mt-6 text-muted">Loading…</p>
+      )}
     </main>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Not logged in: demo leaderboard + login
-// ---------------------------------------------------------------------------
-
-/** Turns Supabase's error in the URL hash into a friendly sentence (or null if there's none). */
-function loginLinkError(hash: string): string | null {
-  const params = new URLSearchParams(hash.replace(/^#/, ""));
-  if (!params.get("error")) return null;
-  return params.get("error_code") === "otp_expired"
-    ? "That login link has expired or was already used. Links work once, for one hour, and only the newest email counts — request a new one below."
-    : "That login link didn't work. Please request a new one below.";
-}
-
-function SignedOut({ linkError }: { linkError: string | null }) {
+/** What a leaderboard looks like, shown until you pick a display name. */
+function DemoPreview() {
   const gamification = useStore((s) => s.gamification);
   const [today] = useState(todayISO);
-  const [showLogin, setShowLogin] = useState(Boolean(linkError));
   const mine = weeklyStats(gamification, today);
-  const ranked = rankLeaderboard([
-    { id: "me", name: "You", ...mine, isMe: true },
-    ...demoBuddies(mine),
-  ]);
-
+  const ranked = rankLeaderboard([{ id: "me", name: "You", ...mine, isMe: true }, ...demoBuddies(mine)]);
   return (
-    <>
-      <div className="mt-6">
-        <MascotBubble message={leaderboardComment(ranked)} />
-      </div>
-      <section aria-labelledby="demo-board" className="mt-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="demo-board" className="text-lg font-semibold">
-            This week
-          </h2>
-          <span className="rounded-full bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">
-            Demo — these friends are made up
-          </span>
-        </div>
-        <Leaderboard ranked={ranked} />
-      </section>
-
-      <section aria-labelledby="login-title" className={`${card} mt-6`}>
-        <h2 id="login-title" className="text-lg font-semibold">
-          Real friends
+    <section aria-labelledby="demo-board" className="mt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="demo-board" className="text-lg font-semibold">
+          Example leaderboard
         </h2>
-        <p className="mt-1 text-sm text-muted">
-          Logging in is only needed here. Everything else in Syllabuddy works without an account.
-        </p>
-        {linkError && (
-          <p role="alert" className="mt-3 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn-ink">
-            {linkError}
-          </p>
-        )}
-        {!showLogin ? (
-          <button type="button" onClick={() => setShowLogin(true)} className={`${buttonPrimary} mt-3`}>
-            Log in to add real friends
-          </button>
-        ) : buddiesConfigured ? (
-          <LoginForm />
-        ) : (
-          <p role="status" className="mt-3 rounded-xl bg-accent-soft px-4 py-3 text-sm">
-            Study buddies with real friends isn&apos;t switched on for this copy of Syllabuddy yet. The demo above
-            shows how it works.
-          </p>
-        )}
-      </section>
-    </>
-  );
-}
-
-function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  if (sent) {
-    return (
-      <p role="status" className="mt-3 rounded-xl bg-success-soft px-4 py-3 text-sm">
-        📬 Check your inbox! We sent a login link to <strong>{email}</strong>. Open it in this browser to continue.
-      </p>
-    );
-  }
-
-  return (
-    <form
-      className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        const problem = await sendMagicLink(email.trim());
-        setBusy(false);
-        if (problem) setError(problem);
-        else setSent(true);
-      }}
-    >
-      <div className="flex-1">
-        <label htmlFor="login-email" className={label}>
-          Email
-        </label>
-        <input
-          id="login-email"
-          type="email"
-          required
-          autoComplete="email"
-          className={input}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          aria-describedby={error ? "login-error" : "login-help"}
-        />
-        <p id="login-help" className="mt-1 text-xs text-muted">
-          We email you a one-click login link. No password. Your email is only used to log in.
-        </p>
-        {error && (
-          <p id="login-error" role="alert" className="mt-1 text-sm text-danger">
-            {error}
-          </p>
-        )}
+        <span className="rounded-full bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">
+          Preview — these friends are made up
+        </span>
       </div>
-      <button type="submit" disabled={busy} className={buttonPrimary}>
-        {busy ? "Sending…" : "Send login link"}
-      </button>
-    </form>
+      <Leaderboard ranked={ranked} />
+    </section>
   );
 }
 
@@ -211,8 +80,7 @@ function LoginForm() {
 // Logged in
 // ---------------------------------------------------------------------------
 
-function SignedIn({ session }: { session: Session }) {
-  const userId = session.user.id;
+function SignedIn({ userId, email }: { userId: string; email: string | null }) {
   const gamification = useStore((s) => s.gamification);
   const [today] = useState(todayISO);
   const [profile, setProfile] = useState<MyProfile | null | "loading">("loading");
@@ -240,7 +108,13 @@ function SignedIn({ session }: { session: Session }) {
   }, [refresh]);
 
   if (profile === "loading") return <p className="mt-6 text-muted">Loading your study buddies…</p>;
-  if (profile === null) return <ChooseName onSaved={refresh} email={session.user.email} />;
+  if (profile === null)
+    return (
+      <>
+        <ChooseName onSaved={refresh} email={email ?? undefined} />
+        <DemoPreview />
+      </>
+    );
 
   const ranked = rankLeaderboard(entries.length ? entries : [{ id: userId, name: profile.displayName, ...weeklyStats(gamification, today), isMe: true }]);
 
@@ -436,24 +310,25 @@ function AccountCard({ profile, onRenamed }: { profile: MyProfile; onRenamed: ()
         {status}
       </p>
       <div className="mt-2 flex flex-wrap gap-3">
-        <button type="button" className={buttonSecondary} onClick={() => signOut()}>
-          Log out
-        </button>
         {!confirmDelete ? (
           <button type="button" className={`${buttonLink} text-sm`} onClick={() => setConfirmDelete(true)}>
-            Delete my online data…
+            Leave Study Buddies…
           </button>
         ) : (
           <div role="alert" className="w-full rounded-xl bg-danger-soft p-3 text-sm">
             <p className="font-medium text-danger">
-              This removes your name, invite code, friendships and weekly stats from the server. Your plan on this
-              device stays.
+              This removes your name, invite code, friendships and weekly stats from Study Buddies. Your plan and
+              deadlines stay in your account.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 className="inline-flex items-center justify-center rounded-full bg-danger px-5 py-2.5 font-semibold text-surface"
-                onClick={async () => setStatus((await deleteMyData()) ?? "Your online data was deleted.")}
+                onClick={async () => {
+                  const problem = await deleteMyData();
+                  setStatus(problem ?? "You left Study Buddies.");
+                  if (!problem) onRenamed();
+                }}
               >
                 Yes, delete it
               </button>

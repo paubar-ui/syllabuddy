@@ -78,6 +78,22 @@ ok(anonBlocked, "logged-out visitors can't read anything");
 await as(A, "select public.remove_friend($1)", [B]);
 ok(JSON.stringify(await names(A)) === '["Ana R"]' && JSON.stringify(await names(B)) === '["Ben"]', "remove_friend removes both directions");
 
+// --- planner_state: each user's plan is private ---
+await as(A, "insert into public.planner_state (state) values ($1)", [JSON.stringify({ deliverables: [{ title: "QA item A" }] })]);
+await as(B, "insert into public.planner_state (state) values ($1)", [JSON.stringify({ deliverables: [{ title: "QA item B" }] })]);
+const planA = (await as(A, "select user_id, state from public.planner_state")).rows;
+ok(planA.length === 1 && planA[0].user_id === A && JSON.stringify(planA[0].state).includes("QA item A"), "A reads only her own plan (default user_id = auth.uid())");
+ok((await as(B, "select state from public.planner_state")).rows.every((r) => !JSON.stringify(r.state).includes("QA item A")), "B can't read A's plan");
+ok((await fails(A, "insert into public.planner_state (user_id, state) values ($1, '{}')", [C])) !== null, "A can't create a plan for someone else");
+await as(B, "update public.planner_state set state = '{}' where user_id = $1", [A]);
+ok(JSON.stringify((await as(A, "select state from public.planner_state")).rows[0].state).includes("QA item A"), "B can't overwrite A's plan");
+await as(A, "update public.planner_state set state = $1", [JSON.stringify({ deliverables: [{ title: "QA item A2" }] })]);
+ok(JSON.stringify((await as(A, "select state from public.planner_state")).rows[0].state).includes("QA item A2"), "A can update her own plan");
+await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;");
+let anonPlan = false; try { await db.query("select * from public.planner_state"); } catch { anonPlan = true; }
+await db.exec("reset role;");
+ok(anonPlan, "logged-out visitors can't read any plan");
+
 await as(B, "select public.delete_my_data()");
 const left = (await db.query("select count(*)::int as n from public.weekly_stats where user_id = $1", [B])).rows[0].n
   + (await db.query("select count(*)::int as n from public.profiles where id = $1", [B])).rows[0].n

@@ -2,7 +2,7 @@
 
 **Upload your syllabi, tell us how hard each class is for you, and get a daily study plan that keeps you on track — with streaks, a mascot coach and friends to compete with.**
 
-🔗 **Live app: [syllabuddy-five.vercel.app](https://syllabuddy-five.vercel.app)** — no account needed. Click **“Try with a demo semester”** to explore with four sample courses.
+🔗 **Live app: [syllabuddy-five.vercel.app](https://syllabuddy-five.vercel.app)** — sign up free with email and password, then add your first deadline (or click **“Load a sample semester”** to explore with four sample courses).
 
 ![Today screen: Tick the mascot, streak, points and today's study blocks](docs/screenshots/today.png)
 
@@ -17,6 +17,7 @@ Syllabuddy turns those PDFs into a realistic daily plan: it spreads the work out
 ## Features
 
 **Plan**
+- ➕ **Add a deadline in seconds** — type what's due (e.g. "Finance midterm") and press *Add deadline*; the type is recognised from the title and the date, course and weight get sensible defaults you can change. It's saved to your account and planned immediately.
 - 📄 **Syllabus import** — paste the text or upload a PDF (read in your browser). A built-in reader finds deliverables, due dates, grade weights, the grading scale and attendance rules, in **English and Spanish** (`15/11/2026`, `Nov 15`, `15 de noviembre`, `Week 7`, `Midterm – 30%`…). You always review and fix everything before saving.
 - 🎚️ **Effort per course** — tell it how hard each class is *for you* (1–5) and an optional target grade.
 - 🗓️ **Daily schedule** — study blocks of 25–90 minutes, fitted around your free time per weekday and a daily cap.
@@ -34,7 +35,7 @@ Syllabuddy turns those PDFs into a realistic daily plan: it spreads the work out
 - 🔥 **Streaks, points and streak freezes**, with rest days that never break a streak.
 - ⏰ **Tick, the mascot coach** — an original alarm-clock character with three tones: *gentle*, *coach* and *savage* (cheeky, never mean).
 - 🌙 **Burnout guard** — after 3 days over your daily limit (or 7 days without a break), Tick suggests a night off, and **Protect tonight** moves today's work elsewhere.
-- 🧑‍🤝‍🧑 **Study buddies** — add friends with an invite code and compete on a weekly leaderboard of points, streaks and hours. Without logging in you see a demo leaderboard.
+- 🧑‍🤝‍🧑 **Study buddies** — add friends with an invite code and compete on a weekly leaderboard of points, streaks and hours. Until you join, you see an example leaderboard.
 
 | Plan | Courses & grade calculator | Panic mode |
 |---|---|---|
@@ -93,18 +94,22 @@ flowchart LR
 |---|---|
 | Framework | [Next.js 16](https://nextjs.org) (App Router) · React 19 · TypeScript |
 | Styling | Tailwind CSS 4 — light & dark mode, WCAG 2.1 AA contrast |
-| State | Zustand, saved to `localStorage` |
+| State & data | Zustand in the browser, saved to your account in Supabase (Postgres with Row Level Security) |
 | Validation | Zod |
 | Dates | date-fns |
 | PDF | pdf.js (`pdfjs-dist`), in the browser |
-| Study buddies | Supabase (magic-link login + Postgres with Row Level Security) |
+| Accounts | Supabase Auth — email + password |
 | Optional AI | Anthropic Claude via `@anthropic-ai/sdk` (Claude Haiku 5.5 by default) |
-| Tests | Vitest (unit) · Playwright + axe-core (end-to-end & accessibility) · PGlite (database rules) |
+| Tests | Vitest (unit) · Playwright + axe-core (end-to-end, the grading bot's checks & accessibility) · PGlite (database rules) |
 | Hosting | Vercel |
 
 ## Run it locally
 
-You need [Node.js](https://nodejs.org) 20 or newer.
+You need [Node.js](https://nodejs.org) 20 or newer and a free [Supabase](https://supabase.com) project.
+
+1. In Supabase: run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor, and turn **Authentication → Sign In / Providers → Email → Confirm email** off.
+2. Copy [`.env.example`](.env.example) to `.env.local` and fill in your project's URL and publishable key.
+3. Then:
 
 ```bash
 git clone https://github.com/paubar-ui/syllabuddy.git
@@ -113,7 +118,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. That's it — no keys are needed: everything except real study buddies works out of the box.
+Open http://localhost:3000 and sign up.
 
 | Command | What it does |
 |---|---|
@@ -121,31 +126,33 @@ Open http://localhost:3000. That's it — no keys are needed: everything except 
 | `npm run build` | Production build |
 | `npm run lint` | Check the code with ESLint |
 | `npm test` | 144 unit tests (Vitest) |
-| `npm run test:sql` | Run the database schema in an in-memory Postgres and check the security rules (19 checks) |
-| `npm run test:e2e` | Build the app and click through it in a real browser at laptop and phone size, including WCAG 2.1 AA checks on every page (14 tests). Set `PLAYWRIGHT_BASE_URL` to test the live site instead. |
+| `npm run test:sql` | Run the database schema in an in-memory Postgres and check the security rules (25 checks) |
+| `npm run test:e2e` | Build the app and test it in a real browser at laptop and phone size, exactly like the grading bot: sign up, save a deadline, log out, wrong password refused, log in from a clean browser, second user can't see it, no access without login — plus WCAG 2.1 AA checks on every page (12 tests). Set `PLAYWRIGHT_BASE_URL` to test the live site instead. |
 
 ## Environment variables
 
-All are **optional**. Copy [`.env.example`](.env.example) to `.env.local` (git-ignored) and fill in what you need; on Vercel, add them under *Settings → Environment Variables*.
+Copy [`.env.example`](.env.example) to `.env.local` (git-ignored); on Vercel, add them under *Settings → Environment Variables*. The two Supabase values are required; the Anthropic ones are optional.
 
 | Name | Used for |
 |---|---|
 | `ANTHROPIC_API_KEY` | Turns on AI syllabus reading. Without it, the built-in offline reader is used. (Secret — server only.) |
 | `ANTHROPIC_MODEL` | Which Claude model to use (default `claude-haiku-5-5`). |
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL, for study buddies. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL (accounts and data). |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Your Supabase publishable (anon) key. Public by design — the database rules protect the data. |
 
-To set up study buddies, run [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL editor and add your site's address under *Authentication → URL Configuration*.
+On a deployed site, also add its address under Supabase *Authentication → URL Configuration*.
 
 ## Privacy
 
-Syllabuddy is built to store as little as possible:
+Syllabuddy is built to store as little as possible, and to keep it private:
 
-- **Your courses, grades, syllabi and plan never leave your device.** They live in your browser's `localStorage`. There's no account for the core app, and no analytics or tracking.
-- **PDFs are read in your browser.** Only if AI reading is switched on is the *text* (not the file) sent to the server and to Anthropic for extraction; Syllabuddy doesn't store it. The live demo runs without AI.
-- **Study buddies** is the only part that uses a server, and it only stores your **email** (to log in), a **display name** you choose, and **weekly totals** — points, streak and minutes. Friends see your name and those three numbers, nothing else.
-- **Row Level Security** in the database means people can only read their own and their friends' rows; invite codes are private to their owner. These rules are tested automatically (`npm run test:sql`).
-- **You stay in control:** export or import all your data as JSON and reset it any time in *Settings*; *Delete my online data* on the Buddies page removes your profile, friendships and stats from the server.
+- **Your account** is just an email and a password (handled by Supabase Auth; passwords are never stored in plain text).
+- **Your plan** — deadlines, courses, study blocks, points and streak — is saved in one row in Supabase that **only you can read or change**. Row Level Security is on for every table, with rules based on `auth.uid()`: other users can't see your data, and nobody can read anything without logging in. These rules are tested automatically (`npm run test:sql`) and against the live site (`npm run test:e2e`).
+- **PDFs are read in your browser.** Only if AI reading is switched on is the *text* (not the file) sent to the server and to Anthropic for extraction; Syllabuddy doesn't store it. The live app runs without AI.
+- **Study buddies** is opt-in: friends only ever see the display name you choose and your weekly totals (points, streak, minutes) — never your deadlines, courses or grades. *Leave Study Buddies* removes that profile.
+- **Only public values reach the browser** (the Supabase URL and publishable key); no secret keys are in the code or on GitHub.
+- **You stay in control:** export or import your data as JSON and reset it any time in *Settings*.
+- No analytics or tracking.
 
 ## Accessibility
 
@@ -157,7 +164,7 @@ Syllabuddy was built for a university assignment with **[Claude Code](https://cl
 
 - **Spec first.** The product was described in [`CLAUDE.md`](CLAUDE.md) — goals, rules (no login for core features, demo mode, privacy, accessibility), data model, algorithms and pages — and built in phases using the prompts in [`PROMPTS.md`](PROMPTS.md).
 - **Phase by phase.** Claude Code wrote the code and tests for each phase, ran lint, tests and the production build, and clicked through the app in a browser before each commit. I tried the app in the browser, made the product decisions, set up Supabase, GitHub and Vercel, and asked for changes when something felt off.
-- **Decisions along the way.** With no AI key available, the offline syllabus reader became the main path instead of a fallback. Study buddies were designed so only weekly totals are shared. Personal email addresses were kept out of the public git history.
+- **Decisions along the way.** With no AI key available, the offline syllabus reader became the main path instead of a fallback. When the assignment's grading contract arrived (email + password accounts, `/signup`, `/login`, `/app`, all user data in Supabase), the app was reworked to follow it: the plan moved from the browser into a private Supabase table, and "add a deadline" became the one-action main feature. Study buddies were designed so only weekly totals are shared. Personal email addresses were kept out of the public git history.
 - **Tests caught real problems**, for example: "Problem *set 1*" being read as *September 1* (Spanish "set" = *setiembre*), a demo semester with more work than free time, faded text that failed contrast checks, and Next.js keeping hidden copies of earlier pages in the DOM — which duplicated test IDs and would have confused the grading bot.
 - **AI inside the app is optional.** If `ANTHROPIC_API_KEY` is set, `/api/extract` asks Claude to read a syllabus and return strict JSON, which is validated with Zod and always shown for review. Without a key the app never calls an AI service.
 

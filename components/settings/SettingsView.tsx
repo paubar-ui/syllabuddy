@@ -36,7 +36,7 @@ export function SettingsView() {
 function SettingsContent() {
   return (
     <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/today" className={`${buttonLink} text-sm`}>
+      <Link href="/app" className={`${buttonLink} text-sm`}>
         ← Back to today
       </Link>
       <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Settings</h1>
@@ -239,8 +239,8 @@ function DataSettings() {
         Your data
       </h2>
       <p className="mt-1 text-sm text-muted">
-        Everything is stored only in this browser — no account, no server. Download a backup to move it to another
-        device.
+        Your plan is saved privately in your account, so it&apos;s the same on every device. Download a backup as a
+        JSON file any time.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-3">
@@ -300,7 +300,7 @@ function DataSettings() {
         ) : (
           <div role="alert" className="mt-2 rounded-xl bg-danger-soft p-3 text-sm">
             <p className="font-medium text-danger">
-              This deletes your courses, plan, points and streak from this browser. It can&apos;t be undone.
+              This deletes your courses, deadlines, plan, points and streak from your account. It can&apos;t be undone.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -308,7 +308,7 @@ function DataSettings() {
                 className="inline-flex items-center justify-center rounded-full bg-danger px-5 py-2.5 font-semibold text-surface"
                 onClick={() => {
                   useStore.getState().reset();
-                  router.push("/");
+                  router.push("/app");
                 }}
               >
                 Yes, delete everything

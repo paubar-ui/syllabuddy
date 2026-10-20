@@ -13,7 +13,7 @@ export default function NotFound() {
       <h1 className="mt-1 text-2xl font-bold">This page took a day off</h1>
       <p className="mt-2 text-muted">We couldn&apos;t find that page. Let&apos;s get you back on track.</p>
       <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <Link href="/today" className={buttonPrimary}>
+        <Link href="/app" className={buttonPrimary}>
           Go to today
         </Link>
         <Link href="/" className={buttonSecondary}>

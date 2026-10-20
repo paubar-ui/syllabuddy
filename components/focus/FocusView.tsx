@@ -127,7 +127,7 @@ function FocusContent() {
         <Tick size={96} className="mx-auto" />
         <h1 className="mt-4 text-2xl font-bold">Study block not found</h1>
         <p className="mt-2 text-muted">It may have moved when your plan was updated.</p>
-        <Link href="/today" className={`${buttonSecondary} mt-6`}>
+        <Link href="/app" className={`${buttonSecondary} mt-6`}>
           Back to today
         </Link>
       </main>
@@ -166,7 +166,7 @@ function FocusContent() {
 
   return (
     <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-6 pb-28 md:pb-10">
-      <Link href="/today" className={`${buttonLink} text-sm`}>
+      <Link href="/app" className={`${buttonLink} text-sm`}>
         ← Back to today
       </Link>
       <h1 className="mt-3 text-2xl font-bold sm:text-3xl">{deliverable.title}</h1>

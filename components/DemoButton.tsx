@@ -1,8 +1,18 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
+import { buttonPrimary, buttonSecondary } from "./ui";
 
-export function DemoButton({ className = "" }: { className?: string }) {
+/** Fills your account with four sample courses (only offered while your plan is empty). */
+export function DemoButton({
+  className = "",
+  label = "Try with a demo semester",
+  variant = "primary",
+}: {
+  className?: string;
+  label?: string;
+  variant?: "primary" | "secondary";
+}) {
   const router = useRouter();
   const loadDemo = useStore((s) => s.loadDemo);
 
@@ -12,11 +22,11 @@ export function DemoButton({ className = "" }: { className?: string }) {
       data-testid="demo-button"
       onClick={() => {
         loadDemo();
-        router.push("/today");
+        router.push("/app");
       }}
-      className={`rounded-full bg-accent px-6 py-3 text-base font-semibold text-on-accent shadow-sm transition hover:opacity-90 ${className}`}
+      className={`${variant === "primary" ? buttonPrimary : buttonSecondary} ${className}`}
     >
-      Try with a demo semester
+      {label}
     </button>
   );
 }

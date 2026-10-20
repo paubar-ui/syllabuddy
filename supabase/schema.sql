@@ -206,3 +206,38 @@ grant execute on function public.ensure_my_profile(text) to authenticated;
 grant execute on function public.add_friend_by_code(text) to authenticated;
 grant execute on function public.remove_friend(uuid) to authenticated;
 grant execute on function public.delete_my_data() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Your plan (grading contract: all user data in Supabase, private to its owner)
+-- ---------------------------------------------------------------------------
+
+-- One row per user with everything the planner needs: courses, deadlines, study blocks,
+-- availability, pace, points and streak. Only the owner can read or change it.
+create table if not exists public.planner_state (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  state jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.planner_state enable row level security;
+
+drop policy if exists "planner_state: read own" on public.planner_state;
+create policy "planner_state: read own" on public.planner_state
+  for select to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists "planner_state: insert own" on public.planner_state;
+create policy "planner_state: insert own" on public.planner_state
+  for insert to authenticated
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "planner_state: update own" on public.planner_state;
+create policy "planner_state: update own" on public.planner_state
+  for update to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "planner_state: delete own" on public.planner_state;
+create policy "planner_state: delete own" on public.planner_state
+  for delete to authenticated
+  using (user_id = (select auth.uid()));

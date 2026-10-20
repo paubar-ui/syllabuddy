@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { TodayView } from "@/components/today/TodayView";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Today" };
-
+// /today moved to /app (grading contract).
 export default function TodayPage() {
-  return <TodayView />;
+  redirect("/app");
 }

@@ -1,8 +1,11 @@
-// The app's memory: one Zustand store, saved to localStorage so data survives a refresh.
+// The app's memory: one Zustand store. It is saved to your account in Supabase by
+// lib/planSync.ts (grading contract: no user data in localStorage).
 import { create } from "zustand";
-import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { BackupData } from "./backup";
-import { todayISO } from "./dates";
+import { addDaysISO, todayISO } from "./dates";
+import { COURSE_COLORS } from "./draft";
+import { newId } from "./id";
+import { detectType } from "./parseSyllabus";
 import { createDemoSemester, DEMO_AVAILABILITY } from "./demo";
 import { estimateHours } from "./estimate";
 import type { FocusTimer } from "./focus";
@@ -29,32 +32,7 @@ import type {
 
 export const DEFAULT_AVAILABILITY: Availability = DEMO_AVAILABILITY;
 
-/** localStorage can be missing (server render) or blocked (private mode) — never crash. */
-const safeLocalStorage: StateStorage = {
-  getItem: (key) => {
-    try {
-      return typeof window === "undefined" ? null : window.localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem: (key, value) => {
-    try {
-      if (typeof window !== "undefined") window.localStorage.setItem(key, value);
-    } catch {
-      // Storage full or blocked: keep working in memory.
-    }
-  },
-  removeItem: (key) => {
-    try {
-      if (typeof window !== "undefined") window.localStorage.removeItem(key);
-    } catch {
-      // Ignore.
-    }
-  },
-};
-
-interface Data {
+export interface Data {
   courses: Course[];
   deliverables: Deliverable[];
   blocks: StudyBlock[];
@@ -93,6 +71,11 @@ interface Actions {
   protectTonight: (today?: string) => void;
   /** Replaces everything with an imported backup. */
   importData: (data: BackupData) => void;
+  /** Replaces everything with what was loaded from your account. */
+  replaceAll: (data: Partial<Data>) => void;
+  /** The main feature: add a deadline by title; everything else has a sensible default. */
+  addDeadline: (input: AddDeadlineInput, today?: string) => Deliverable;
+  removeDeliverable: (id: string, today?: string) => void;
   /** Run once when the app opens: checks past days for a broken streak. */
   settleDays: (today?: string) => void;
   setMascotTone: (tone: Gamification["mascotTone"]) => void;
@@ -100,6 +83,33 @@ interface Actions {
 }
 
 export type SyllabuddyState = Data & Actions;
+
+export interface AddDeadlineInput {
+  id?: string;
+  title: string;
+  dueDate?: string; // default: one week from today
+  courseId?: string; // default: your first course, or a new "My deadlines" course
+  weight?: number; // default: 10% of the grade
+}
+
+const DATA_KEYS = [
+  "courses",
+  "deliverables",
+  "blocks",
+  "availability",
+  "pace",
+  "gamification",
+  "warnings",
+  "isDemo",
+  "focusMinutes",
+  "timer",
+  "lastReplan",
+] as const satisfies readonly (keyof Data)[];
+
+/** Just the data (no functions) — this is what gets saved to your account. */
+export function dataOf(state: SyllabuddyState): Data {
+  return Object.fromEntries(DATA_KEYS.map((k) => [k, state[k]])) as unknown as Data;
+}
 
 const initialData = (): Data => ({
   courses: [],
@@ -116,7 +126,6 @@ const initialData = (): Data => ({
 });
 
 export const useStore = create<SyllabuddyState>()(
-  persist(
     (set, get) => {
       const estimateFor = (
         d: Pick<Deliverable, "type" | "weight" | "courseId">,
@@ -317,38 +326,54 @@ export const useStore = create<SyllabuddyState>()(
         setMascotTone: (mascotTone) =>
           set((s) => ({ gamification: { ...s.gamification, mascotTone } })),
 
+        replaceAll: (data) => {
+          const base = initialData();
+          const clean: Partial<Data> = {};
+          // Only take fields that look right, so a damaged row can never crash the app.
+          for (const k of DATA_KEYS) {
+            const v = data?.[k];
+            if (v === undefined) continue;
+            const expected = base[k];
+            if (Array.isArray(expected) ? Array.isArray(v) : typeof v === typeof expected || expected === null) {
+              (clean as Record<string, unknown>)[k] = v;
+            }
+          }
+          set({ ...base, ...clean });
+        },
+
+        addDeadline: ({ id, title, dueDate, courseId, weight }, today = todayISO()) => {
+          const s = get();
+          let courses = s.courses;
+          let course = courses.find((c) => c.id === courseId) ?? courses[0];
+          if (!course) {
+            course = { id: newId(), name: "My deadlines", color: COURSE_COLORS[0], effort: 3, gradeScale: 10 };
+            courses = [...courses, course];
+          }
+          const base = {
+            id: id ?? newId(),
+            courseId: course.id,
+            title: title.trim(),
+            type: detectType(title) ?? ("other" as const),
+            dueDate: dueDate && dueDate >= today ? dueDate : addDaysISO(today, 7),
+            weight: weight !== undefined && weight >= 0 && weight <= 100 ? weight : 10,
+            loggedMinutes: 0,
+            done: false,
+          };
+          const deliverable: Deliverable = { ...base, estimatedHours: estimateFor(base, courses) };
+          set({ courses, deliverables: [...s.deliverables, deliverable], isDemo: false });
+          get().generatePlan(today);
+          return deliverable;
+        },
+
+        removeDeliverable: (id, today = todayISO()) => {
+          set((s) => ({
+            deliverables: s.deliverables.filter((d) => d.id !== id),
+            blocks: s.blocks.filter((b) => b.deliverableId !== id || b.status === "done"),
+          }));
+          get().generatePlan(today);
+        },
+
         reset: () => set(initialData()),
       };
     },
-    {
-      name: "syllabuddy",
-      version: 1,
-      storage: createJSONStorage(() => safeLocalStorage),
-      partialize: ({
-        courses,
-        deliverables,
-        blocks,
-        availability,
-        pace,
-        gamification,
-        warnings,
-        isDemo,
-        focusMinutes,
-        timer,
-        lastReplan,
-      }): Data => ({
-        courses,
-        deliverables,
-        blocks,
-        availability,
-        pace,
-        gamification,
-        warnings,
-        isDemo,
-        focusMinutes,
-        timer,
-        lastReplan,
-      }),
-    },
-  ),
 );

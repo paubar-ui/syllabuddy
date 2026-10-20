@@ -1,9 +1,11 @@
 "use client";
-// The main daily screen: Tick's message, streak & points, today's study blocks, deadlines in the next 72h.
+// /app — the main screen: add a deadline (the core feature), Tick's message, streak & points,
+// today's study blocks and all your deadlines.
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoButton } from "@/components/DemoButton";
+import { AddDeadline, DeadlineList } from "@/components/today/Deadlines";
 import { MascotBubble, Tick } from "@/components/Tick";
 import { buttonLink, buttonPrimary, buttonSecondary, card } from "@/components/ui";
 import { detectBurnout } from "@/lib/burnout";
@@ -79,16 +81,30 @@ function TodayContent() {
 
   if (courses.length === 0) {
     return (
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 pb-28 text-center md:pb-10">
-        <Tick size={96} className="mx-auto" />
-        <h1 className="mt-4 text-2xl font-bold">No plan yet</h1>
-        <p className="mt-2 text-muted">Add your syllabi to get a daily plan, or look around with a demo semester.</p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <DemoButton />
-          <Link href="/onboarding" data-testid="start-button" className={buttonSecondary}>
-            Start with my syllabi
-          </Link>
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 md:pb-10">
+        <div className="flex items-center gap-3">
+          <Tick size={56} />
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">Welcome to Syllabuddy!</h1>
+            <p className="text-muted">Add your first deadline and get a daily study plan.</p>
+          </div>
         </div>
+        <AddDeadline today={today} />
+        <section aria-labelledby="start-title" className={`${card} mt-6`}>
+          <h2 id="start-title" className="font-semibold">
+            Faster: add a whole course at once
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Paste or upload a syllabus and we&apos;ll find every deadline and weight — or explore with sample courses.
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <Link href="/onboarding" data-testid="start-button" className={buttonSecondary}>
+              Upload my syllabi
+            </Link>
+            <DemoButton label="Load a sample semester" variant="secondary" />
+          </div>
+        </section>
+        <DeadlineList today={today} />
       </main>
     );
   }
@@ -145,22 +161,14 @@ function TodayContent() {
           <h1 className="text-2xl font-bold sm:text-3xl">Today</h1>
           <p className="text-muted">{format(parseISO(today), "EEEE d MMMM")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isDemo && (
-            <p className="rounded-full bg-accent-soft px-3 py-1 text-sm">
-              Demo semester ·{" "}
-              <Link href="/onboarding" className={buttonLink}>
-                use my own syllabi
-              </Link>
-            </p>
-          )}
-          <Link
-            href="/settings"
-            className="rounded-full border border-line px-3 py-1 text-sm font-medium hover:bg-accent-soft md:hidden"
-          >
-            <span aria-hidden="true">⚙ </span>Settings
-          </Link>
-        </div>
+        {isDemo && (
+          <p className="rounded-full bg-accent-soft px-3 py-1 text-sm">
+            Sample semester ·{" "}
+            <Link href="/onboarding" className={buttonLink}>
+              use my own syllabi
+            </Link>
+          </p>
+        )}
       </div>
 
       <dl className="mt-5 grid grid-cols-3 gap-3">
@@ -172,6 +180,8 @@ function TodayContent() {
       <div className="mt-6">
         <MascotBubble message={message} />
       </div>
+
+      <AddDeadline today={today} />
 
       {burnout.triggered && (
         <section aria-labelledby="burnout-title" className="mt-4 rounded-2xl border border-line bg-success-soft p-4">
@@ -318,34 +328,7 @@ function TodayContent() {
         </p>
       </section>
 
-      <section aria-labelledby="deadlines" className="mt-8">
-        <h2 id="deadlines" className="text-lg font-semibold">
-          Deadlines in the next 72 hours
-        </h2>
-        {upcoming.length === 0 ? (
-          <p className="mt-2 text-muted">No deadlines in the next three days.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {upcoming.map(({ d, days }) => (
-              <li key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
-                <span>
-                  <span className="block font-medium">{d.title}</span>
-                  <span className="block text-sm text-muted">
-                    {courseById.get(d.courseId)?.name} · {d.weight}% of grade
-                  </span>
-                </span>
-                <span
-                  className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${
-                    days <= 1 ? "bg-danger-soft text-danger" : "bg-warn-bg text-warn-ink"
-                  }`}
-                >
-                  Due {describeDaysAway(days)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <DeadlineList today={today} />
 
       {warnings.length > 0 && (
         <details className="mt-8 rounded-xl bg-warn-bg px-4 py-3 text-warn-ink">

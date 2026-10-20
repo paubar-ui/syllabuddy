@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { AppNav } from "@/components/AppNav";
+import { AuthGate } from "@/components/AuthGate";
+import { SessionProvider } from "@/components/SessionProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -42,11 +44,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        {/* The nav reads the URL, which on dynamic pages (/focus/…) is only known at request time. */}
+        <SessionProvider />
+        {/* The nav and gate read the URL, which on dynamic pages (/focus/…) is only known at request time. */}
         <Suspense fallback={null}>
           <AppNav />
+          <AuthGate>{children}</AuthGate>
         </Suspense>
-        {children}
       </body>
     </html>
   );

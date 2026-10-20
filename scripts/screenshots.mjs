@@ -11,9 +11,14 @@ const browser = await chromium.launch();
 
 async function shoot(viewport, shots) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2, colorScheme: "light" });
-  await page.goto(base);
+  // A throwaway account filled with the sample semester.
+  await page.goto(`${base}/signup`);
+  await page.getByTestId("signup-email").fill(`screenshots-${Date.now()}@example.com`);
+  await page.getByTestId("signup-password").fill(`Shots-${Math.random().toString(36).slice(2)}`);
+  await page.getByTestId("signup-submit").click();
+  await page.waitForURL(/\/app$/);
   await page.getByTestId("demo-button").click();
-  await page.waitForURL(/\/today$/);
+  await page.getByTestId("today-list").waitFor();
   // Tick one block so points and progress show something.
   await page.locator('[data-testid^="block-checkbox-"]').first().check();
   for (const [name, path, prepare] of shots) {
@@ -27,9 +32,17 @@ async function shoot(viewport, shots) {
   await page.close();
 }
 
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  await page.goto(base);
+  await page.locator("h1").waitFor();
+  await page.screenshot({ path: `${out}/landing.png` });
+  console.log(`saved ${out}/landing.png`);
+  await page.close();
+}
+
 await shoot({ width: 1280, height: 800 }, [
-  ["landing", "/"],
-  ["today", "/today"],
+  ["today", "/app"],
   ["plan", "/plan"],
   [
     "courses",
@@ -44,6 +57,6 @@ await shoot({ width: 1280, height: 800 }, [
   ["buddies", "/buddies"],
 ]);
 
-await shoot({ width: 390, height: 844 }, [["mobile-today", "/today"]]);
+await shoot({ width: 390, height: 844 }, [["mobile-today", "/app"]]);
 
 await browser.close();
