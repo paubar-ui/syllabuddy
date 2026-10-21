@@ -1,5 +1,20 @@
 # Syllabuddy v2 — upgrade prompts
 
+## V2-8 — Grading fixes: auth, data isolation, first-step UX (do this first)
+
+```
+My provisional grade flagged these. Audit and fix, then show me proof for each:
+
+1. Auth flow (the grading bot tests this): sign up with a new email in a clean browser → create a plan → log out → log back in → plan is still there. Wrong password shows a clear error and does NOT log in. Password reset works. Logged-in-only pages redirect to /login when there is no session (server-side check, not just client). Tell me whether Supabase "Confirm email" is on and what that means for a bot signing up.
+
+2. Data isolation: Row Level Security ON for every table, with policies so each user can only read/write their own rows. The friends leaderboard must come from a server-side query/RPC that only returns aggregate stats (display name, points, streak, hours) of users connected to me by an accepted invite — never courses, deadlines, plans or emails. Any API route returns 401 without a session and 403/404 for other users' ids.
+   Prove it: write automated tests with two test users A and B (A cannot read B's courses/plan, A sees B on the leaderboard only after connecting, unauthenticated requests are rejected). List every table + its RLS policies in SECURITY.md.
+
+3. First-step UX: on a 375px phone, the main CTA is visible without scrolling. Make the AI import feel small: "Step 1 of 3" progress, a big Copy prompt button, a 3-line example of what to paste back, a "Paste sample" button, and a visible "Or just type your deadlines" shortcut so users can skip it.
+
+Run lint, tests, build. Commit and push. Then give me a short checklist I can repeat by hand in an incognito window.
+```
+
 ## V2-7 — Smart input without an API key (do this next)
 
 ```

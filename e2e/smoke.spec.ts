@@ -486,6 +486,11 @@ test("V2-7: import with your AI assistant, Blackboard sessions as dates, quick a
   await page.getByTestId("assistant-import-button").click();
   const box = page.getByTestId("assistant-import");
   await expect(box.getByLabel("Prompt for your AI assistant")).toHaveValue(/DELIVERABLE: <title> \| <type>/);
+  await expect(box.getByText("Step 1 of 3")).toBeVisible();
+  await expect(box.getByTestId("type-instead")).toBeVisible();
+  await box.getByTestId("copy-prompt").click();
+  await box.getByRole("button", { name: "I have the answer" }).click();
+  await expect(box.getByText("Step 3 of 3")).toBeVisible();
   await box.getByTestId("assistant-answer").fill("COURSE: Broken\nDELIVERABLE: Essay | essay | next Friday | 10%");
   await box.getByTestId("read-answer").click();
   await expect(box.getByRole("alert")).toContainText('Line 2: the date "next Friday" should look like 2026-11-15');
@@ -534,6 +539,8 @@ test("V2-7: import with your AI assistant, Blackboard sessions as dates, quick a
 
   // …and an import of "Session N" deadlines takes the date from Blackboard
   await page.getByTestId("assistant-import-button").click();
+  await page.getByTestId("copy-prompt").click();
+  await page.getByRole("button", { name: "I have the answer" }).click();
   await page.getByTestId("paste-sample").click();
   await page.getByTestId("read-answer").click();
   await expect(page.getByTestId("assistant-review").getByText(/^Date from Blackboard: Session 9 ·/)).toBeVisible();
@@ -547,5 +554,25 @@ test("V2-7: import with your AI assistant, Blackboard sessions as dates, quick a
   await expect(page.getByLabel("Weight (% of grade)")).toHaveValue("30");
   await page.getByTestId("core-submit").click();
   await expect(page.getByTestId("core-item").filter({ hasText: "Essay" })).toBeVisible();
+
+  // First step on a phone: with a full plan, "Add deadline" is visible without scrolling
+  if (test.info().project.name === "mobile") {
+    await page.reload();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.getByTestId("core-submit")).toBeInViewport();
+  }
   expect(errors).toEqual([]);
+});
+
+test("password reset: request a link from the login page; an invalid link explains itself", async ({ page }) => {
+  test.skip(test.info().project.name !== "desktop", "runs on desktop only");
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+  await page.getByLabel("Email").fill(uniqueEmail("reset"));
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.getByText("If there's an account for that email, a reset link is on its way")).toBeVisible();
+  await expectNoAxeViolations(page, "/forgot-password");
+  await page.goto("/reset-password");
+  await expect(page.getByText("This reset link has expired or was already used")).toBeVisible({ timeout: 10_000 });
 });

@@ -54,19 +54,17 @@ export async function deleteMyData(): Promise<string | null> {
 
 /** Uploads this week's aggregates. Only points, streak and minutes — never courses or grades. */
 export async function syncWeek(userId: string, stats: WeeklyStats): Promise<void> {
-  await getSupabase()
-    ?.from("weekly_stats")
-    .upsert(
-      {
-        user_id: userId,
-        week: stats.week,
-        points: stats.points,
-        streak: stats.streak,
-        minutes: stats.minutes,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,week" },
-    );
+  await getSupabase()?.from("weekly_stats").upsert(
+    {
+      user_id: userId,
+      week: stats.week,
+      points: stats.points,
+      streak: stats.streak,
+      minutes: stats.minutes,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,week" },
+  );
 }
 
 /** Syncs quietly if you're signed in and have a profile; does nothing otherwise. */
@@ -82,10 +80,43 @@ export async function syncIfSignedIn(stats: WeeklyStats): Promise<void> {
   }
 }
 
-/** You and your friends for this week. RLS only returns rows you're allowed to see. */
+/**
+ * You and your friends for this week, from the server-side my_leaderboard() function:
+ * only display names and weekly totals of people connected to you by an invite code.
+ */
 export async function loadLeaderboard(userId: string, week: string): Promise<LeaderboardEntry[]> {
   const sb = getSupabase();
   if (!sb) return [];
+  const { data, error } = await sb.rpc("my_leaderboard", { p_week: week });
+  // Until the database update (supabase/schema.sql) has been run, fall back to the old tables.
+  if (error && /could not find the function|PGRST202/i.test(`${error.code} ${error.message}`)) {
+    return loadLeaderboardFromTables(sb, userId, week);
+  }
+  if (error) throw new Error(friendly(error.message));
+  return (
+    (data ?? []) as {
+      id: string;
+      display_name: string;
+      points: number;
+      streak: number;
+      minutes: number;
+      is_me: boolean;
+    }[]
+  ).map((r) => ({
+    id: r.id,
+    name: r.display_name,
+    points: r.points,
+    streak: r.streak,
+    minutes: r.minutes,
+    isMe: r.is_me || r.id === userId,
+  }));
+}
+
+async function loadLeaderboardFromTables(
+  sb: NonNullable<ReturnType<typeof getSupabase>>,
+  userId: string,
+  week: string,
+): Promise<LeaderboardEntry[]> {
   const [{ data: profiles, error: e1 }, { data: stats, error: e2 }] = await Promise.all([
     sb.from("profiles").select("id, display_name"),
     sb.from("weekly_stats").select("user_id, points, streak, minutes").eq("week", week),
@@ -93,13 +124,13 @@ export async function loadLeaderboard(userId: string, week: string): Promise<Lea
   if (e1 || e2) throw new Error(friendly((e1 ?? e2)!.message));
   const byUser = new Map((stats ?? []).map((s) => [s.user_id as string, s]));
   return (profiles ?? []).map((p) => {
-    const s = byUser.get(p.id as string);
+    const st = byUser.get(p.id as string);
     return {
       id: p.id as string,
       name: p.display_name as string,
-      points: s?.points ?? 0,
-      streak: s?.streak ?? 0,
-      minutes: s?.minutes ?? 0,
+      points: st?.points ?? 0,
+      streak: st?.streak ?? 0,
+      minutes: st?.minutes ?? 0,
       isMe: p.id === userId,
     };
   });

@@ -43,9 +43,7 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
   return (
     <main id="main" className="mx-auto w-full max-w-md flex-1 px-4 py-10">
       <Tick size={40} className="mx-auto" />
-      <h1 className="mt-3 text-center text-2xl font-bold">
-        {isSignup ? "Create your free account" : "Welcome back"}
-      </h1>
+      <h1 className="mt-3 text-center text-2xl font-bold">{isSignup ? "Create your free account" : "Welcome back"}</h1>
       <p className="mt-1 text-center text-muted">
         {isSignup
           ? "Turn your deadlines into a daily study plan — saved to your account, on any device."
@@ -93,6 +91,16 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
         {error && (
           <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
             {error}
+          </p>
+        )}
+        {!isSignup && (
+          <p className="-mt-2 text-right text-sm">
+            <Link
+              href="/forgot-password"
+              className="font-medium text-accent underline underline-offset-2 hover:no-underline"
+            >
+              Forgot password?
+            </Link>
           </p>
         )}
         <button type="submit" data-testid={`${p}-submit`} disabled={busy} className={`${buttonPrimary} w-full`}>

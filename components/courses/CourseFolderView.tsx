@@ -84,6 +84,10 @@ function FolderContent() {
           target={course}
           today={today}
           onCancel={() => setImporting(false)}
+          onTypeInstead={() => {
+            setImporting(false);
+            setTimeout(() => document.getElementById("dl-title")?.focus(), 0);
+          }}
           onDone={(message) => {
             setImporting(false);
             setAnnouncement(message);

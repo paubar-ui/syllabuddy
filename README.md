@@ -147,6 +147,8 @@ On a deployed site, also add its address under Supabase *Authentication → URL 
 
 ## Privacy
 
+Full details — every table, its Row Level Security rules, the API routes and how it's all tested — are in [SECURITY.md](SECURITY.md).
+
 Syllabuddy is built to store as little as possible, and to keep it private:
 
 - **Your account** is just an email and a password (handled by Supabase Auth; passwords are never stored in plain text).

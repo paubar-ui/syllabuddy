@@ -4,12 +4,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { CalendarAutoSync } from "@/components/CalendarAutoSync";
+import { isProtectedPath } from "@/lib/protectedPaths";
 import { useSession } from "@/lib/session";
-
-const PROTECTED = ["/app", "/today", "/plan", "/courses", "/focus", "/panic", "/settings", "/onboarding", "/buddies", "/exam"];
-
-export const isProtectedPath = (path: string) =>
-  PROTECTED.some((p) => path === p || path.startsWith(`${p}/`));
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();

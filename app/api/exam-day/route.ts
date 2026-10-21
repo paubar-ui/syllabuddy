@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { connection } from "next/server";
 import { z } from "zod";
 import { createRateLimiter } from "@/lib/rateLimit";
+import { unauthorized, userIdFrom } from "@/lib/serverAuth";
 
 const short = z.string().trim().max(300);
 const RequestSchema = z.object({
@@ -21,17 +22,19 @@ const rateLimited = createRateLimiter(20, 10 * 60 * 1000);
 const error = (status: number, code: string, message: string) => Response.json({ error: code, message }, { status });
 
 /** GET tells the browser whether AI is switched on, so it only shows the button when it is. */
-export async function GET() {
+export async function GET(request: Request) {
   await connection(); // read the env var per request, not once at build time
+  if (!(await userIdFrom(request))) return unauthorized();
   return Response.json({ available: Boolean(process.env.ANTHROPIC_API_KEY) });
 }
 
 export async function POST(request: Request) {
+  const userId = await userIdFrom(request);
+  if (!userId) return unauthorized();
   if (!process.env.ANTHROPIC_API_KEY) {
     return error(501, "ai_unavailable", "AI explanations are not configured.");
   }
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (rateLimited(ip)) return error(429, "rate_limited", "Too many requests — try again in a few minutes.");
+  if (rateLimited(userId)) return error(429, "rate_limited", "Too many requests — try again in a few minutes.");
 
   let body: z.infer<typeof RequestSchema>;
   try {

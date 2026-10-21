@@ -35,16 +35,20 @@ export function AssistantImport({
   today,
   onDone,
   onCancel,
+  onTypeInstead,
 }: {
   /** Import into this course (from its folder); otherwise courses are created from the answer. */
   target?: Course;
   today: string;
   onDone: (message: string) => void;
   onCancel: () => void;
+  /** "Or just type your deadlines": close this and open the normal form. */
+  onTypeInstead: () => void;
 }) {
   const calendar = useStore((s) => s.calendar);
   const [answer, setAnswer] = useState("");
   const [copied, setCopied] = useState("");
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [problems, setProblems] = useState<ImportProblem[]>([]);
   const [warnings, setWarnings] = useState<ImportProblem[]>([]);
   const [drafts, setDrafts] = useState<DraftCourse[] | null>(null);
@@ -166,110 +170,151 @@ export function AssistantImport({
       <h2 id="ai-import-title" className="text-lg font-semibold tracking-tight">
         Import with ChatGPT or Claude
       </h2>
-      <p className="text-sm text-muted">
-        Your own AI assistant reads the syllabus; we turn its answer into{" "}
-        {target ? "deadlines" : "courses and deadlines"}. No account or key needed here — and you check everything
-        before it&apos;s saved.
-      </p>
-
       {!drafts && (
-        <ol className="mt-3 space-y-4 text-sm">
-          <li>
-            <p className="font-medium">1. Copy this prompt</p>
-            <label htmlFor="ai-prompt" className="sr-only">
-              Prompt for your AI assistant
-            </label>
-            <textarea
-              id="ai-prompt"
-              readOnly
-              value={ASSISTANT_PROMPT}
-              className={`${input} mt-1 h-36 font-mono text-xs`}
-              onFocus={(e) => e.target.select()}
-            />
-            <div className="mt-1 flex items-center gap-3">
+        <>
+          <div className="mt-2 flex items-center gap-3" aria-hidden="true">
+            {[1, 2, 3].map((n) => (
+              <span key={n} className={`h-1.5 flex-1 rounded-full ${n <= step ? "bg-accent" : "bg-line"}`} />
+            ))}
+          </div>
+          <p className="mt-1 text-xs font-medium text-muted" aria-live="polite">
+            Step {step} of 3
+          </p>
+
+          {step === 1 && (
+            <div className="mt-3 text-sm">
+              <p className="font-medium">Copy our prompt</p>
+              <p className="text-muted">It tells your AI assistant exactly how to answer, so we can read it.</p>
               <button
                 type="button"
                 data-testid="copy-prompt"
-                className={buttonSecondary}
+                className={`${buttonPrimary} mt-3 w-full py-3 text-base sm:w-auto sm:px-8`}
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(ASSISTANT_PROMPT);
-                    setCopied("Copied! Now paste it into your assistant.");
+                    setCopied("Copied!");
                   } catch {
-                    setCopied("Select the text above and copy it (⌘C / Ctrl+C).");
+                    setCopied("Open “See the prompt” below and copy it (⌘C / Ctrl+C).");
                   }
+                  setStep(2);
                 }}
               >
                 Copy prompt
               </button>
-              <span role="status" className="text-xs text-success">
+              <details className="mt-3">
+                <summary className="cursor-pointer text-accent">See the prompt</summary>
+                <label htmlFor="ai-prompt" className="sr-only">
+                  Prompt for your AI assistant
+                </label>
+                <textarea
+                  id="ai-prompt"
+                  readOnly
+                  value={ASSISTANT_PROMPT}
+                  className={`${input} mt-1 h-36 font-mono text-xs`}
+                  onFocus={(e) => e.target.select()}
+                />
+              </details>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="mt-3 text-sm">
+              <p role="status" className="text-success">
                 {copied}
-              </span>
-            </div>
-          </li>
-          <li>
-            <p className="font-medium">2. Paste it into ChatGPT, Claude or any assistant you use</p>
-            <p className="text-muted">
-              Then paste your syllabus (or attach the PDF) right after it, and send. You&apos;ll get back a short block
-              of lines starting with COURSE:, DELIVERABLE: and SESSION:.
-            </p>
-          </li>
-          <li>
-            <label htmlFor="ai-answer" className="font-medium">
-              3. Paste the assistant&apos;s answer here
-            </label>
-            <textarea
-              id="ai-answer"
-              data-testid="assistant-answer"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              className={`${input} mt-1 min-h-32 font-mono text-xs`}
-              placeholder={"COURSE: …\nDELIVERABLE: … | … | … | …"}
-              aria-invalid={problems.length > 0}
-              aria-describedby={problems.length ? "ai-problems" : undefined}
-            />
-            {problems.length > 0 && (
-              <div
-                id="ai-problems"
-                role="alert"
-                className="mt-2 rounded-lg border border-danger-line bg-danger-soft p-3"
-              >
-                <p className="font-semibold text-danger">
-                  Please fix {problems.length === 1 ? "this line" : "these lines"}:
-                </p>
-                <ul className="mt-1 list-disc pl-5">
-                  {problems.map((p, i) => (
-                    <li key={i}>
-                      Line {p.line}: {p.message}.
-                    </li>
-                  ))}
-                </ul>
+              </p>
+              <p className="font-medium">Paste it into ChatGPT, Claude or any assistant you use</p>
+              <p className="text-muted">
+                Add your syllabus right after it (paste the text or attach the PDF) and send. Copy the whole answer.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className={buttonPrimary} onClick={() => setStep(3)}>
+                  I have the answer
+                </button>
+                <button type="button" className={buttonSecondary} onClick={() => setStep(1)}>
+                  Back
+                </button>
               </div>
-            )}
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                data-testid="read-answer"
-                className={buttonPrimary}
-                disabled={!answer.trim()}
-                onClick={read}
-              >
-                Read the answer
-              </button>
-              <button
-                type="button"
-                data-testid="paste-sample"
-                className={buttonSecondary}
-                onClick={() => setAnswer(SAMPLE_ANSWER)}
-              >
-                Paste sample
-              </button>
-              <button type="button" className={buttonSecondary} onClick={onCancel}>
-                Cancel
-              </button>
             </div>
-          </li>
-        </ol>
+          )}
+
+          {step === 3 && (
+            <div className="mt-3 text-sm">
+              <label htmlFor="ai-answer" className="font-medium">
+                Paste the assistant&apos;s answer
+              </label>
+              <p className="text-muted">It should look like this:</p>
+              <pre className="mt-1 overflow-x-auto rounded-lg bg-surface-2 p-2 font-mono text-xs leading-relaxed">
+                {
+                  "COURSE: Public Economics\nDELIVERABLE: Midterm | midterm | Session 15 | 30%\nSESSION: 3 | Externalities | Pigouvian taxes | PS2"
+                }
+              </pre>
+              <textarea
+                id="ai-answer"
+                data-testid="assistant-answer"
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                className={`${input} mt-2 min-h-32 font-mono text-xs`}
+                placeholder="Paste here"
+                aria-invalid={problems.length > 0}
+                aria-describedby={problems.length ? "ai-problems" : undefined}
+              />
+              {problems.length > 0 && (
+                <div
+                  id="ai-problems"
+                  role="alert"
+                  className="mt-2 rounded-lg border border-danger-line bg-danger-soft p-3"
+                >
+                  <p className="font-semibold text-danger">
+                    Please fix {problems.length === 1 ? "this line" : "these lines"}:
+                  </p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {problems.map((p, i) => (
+                      <li key={i}>
+                        Line {p.line}: {p.message}.
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="read-answer"
+                  className={buttonPrimary}
+                  disabled={!answer.trim()}
+                  onClick={read}
+                >
+                  Read the answer
+                </button>
+                <button
+                  type="button"
+                  data-testid="paste-sample"
+                  className={buttonSecondary}
+                  onClick={() => setAnswer(SAMPLE_ANSWER)}
+                >
+                  Paste sample
+                </button>
+                <button type="button" className={buttonSecondary} onClick={() => setStep(2)}>
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-sm">
+            <button
+              type="button"
+              data-testid="type-instead"
+              onClick={onTypeInstead}
+              className="font-medium text-accent underline underline-offset-2 hover:no-underline"
+            >
+              Or just type your deadlines
+            </button>
+            <button type="button" onClick={onCancel} className="text-muted underline underline-offset-2 hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </>
       )}
 
       {drafts && (

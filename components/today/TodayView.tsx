@@ -231,256 +231,262 @@ function TodayContent() {
 
   return (
     <main id="main" className={page}>
-      {/* ---------------- Daily briefing ---------------- */}
-      <section
-        data-testid="daily-briefing"
-        aria-labelledby="briefing-title"
-        className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-6"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <p className="text-sm text-muted">{dateLine}</p>
-            <h1 id="briefing-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {greeting(hour, displayName)}
-            </h1>
-          </div>
-          {isDemo && (
-            <p className="rounded-md border border-info-line bg-info-soft px-2.5 py-1 text-xs font-medium text-info-ink">
-              Sample semester ·{" "}
-              <Link href="/courses" className="underline underline-offset-2 hover:no-underline">
-                add my own courses
-              </Link>
-            </p>
-          )}
-        </div>
-        <p className="mt-1 text-muted">{summaryLine(timeline, next)}</p>
-
-        {/* Progress */}
-        <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
-          <Stat label="Day streak" testId="streak-count" value={gamification.streak} tone="warn" />
-          <Stat label="Points" testId="points-count" value={gamification.points} tone="accent" />
-          <Stat label="Streak freezes" value={gamification.streakFreezes} tone="info" />
-        </dl>
-        <p className="mt-2 text-xs text-muted">
-          {yesterday.total > 0
-            ? `Yesterday you did ${yesterday.done} of ${yesterday.total} block${yesterday.total === 1 ? "" : "s"}. `
-            : ""}
-          Finish all of today&apos;s blocks to grow your streak.{" "}
-          <Link href="/buddies" className="font-medium text-accent underline underline-offset-2 hover:no-underline">
-            See the leaderboard
-          </Link>
-        </p>
-
-        {/* Heads up */}
-        {(alerts.length > 0 || protectedTonight) && (
-          <div className="mt-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Heads up</h2>
-            <div className="mt-2 space-y-2">
-              {protectedTonight && (
-                <Callout tone="success" role="status" title="Tonight is protected">
-                  No study planned today — enjoy your evening. Your blocks were moved to other days.
-                </Callout>
-              )}
-              {alerts.map((alert) => (
-                <Callout
-                  key={alert.id}
-                  tone={alert.tone}
-                  title={alert.title}
-                  action={
-                    alert.action.kind === "link" ? (
-                      <Link href={alert.action.href} className={buttonSecondary}>
-                        {alert.action.label}
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => runAction(alert)}
-                        className={alert.action.kind === "protectTonight" ? buttonPrimary : buttonSecondary}
-                      >
-                        {alert.action.label}
-                      </button>
-                    )
-                  }
-                >
-                  {alert.text}
-                </Callout>
-              ))}
+      {/* On phones the main action comes first, so it's visible without scrolling;
+          on larger screens the briefing leads and the action follows it. */}
+      <div className="flex flex-col">
+        {/* ---------------- Daily briefing ---------------- */}
+        <section
+          data-testid="daily-briefing"
+          aria-labelledby="briefing-title"
+          className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm text-muted">{dateLine}</p>
+              <h1 id="briefing-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                {greeting(hour, displayName)}
+              </h1>
             </div>
-          </div>
-        )}
-
-        {/* Today's timeline */}
-        <div className="mt-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="today-blocks" className="text-sm font-semibold uppercase tracking-wider text-muted">
-              Today&apos;s plan
-            </h2>
-            {totalMinutes > 0 && (
-              <p className="text-xs text-muted">
-                {doneMinutes} of {totalMinutes} min done
+            {isDemo && (
+              <p className="rounded-md border border-info-line bg-info-soft px-2.5 py-1 text-xs font-medium text-info-ink">
+                Sample semester ·{" "}
+                <Link href="/courses" className="underline underline-offset-2 hover:no-underline">
+                  add my own courses
+                </Link>
               </p>
             )}
           </div>
-          {totalMinutes > 0 && (
-            <div
-              className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2"
-              role="progressbar"
-              aria-label="Today's progress"
-              aria-valuemin={0}
-              aria-valuemax={totalMinutes}
-              aria-valuenow={doneMinutes}
-            >
-              <div
-                className="h-full rounded-full bg-accent"
-                style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }}
-              />
+          <p className="mt-1 text-muted">{summaryLine(timeline, next)}</p>
+
+          {/* Progress */}
+          <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
+            <Stat label="Day streak" testId="streak-count" value={gamification.streak} tone="warn" />
+            <Stat label="Points" testId="points-count" value={gamification.points} tone="accent" />
+            <Stat label="Streak freezes" value={gamification.streakFreezes} tone="info" />
+          </dl>
+          <p className="mt-2 text-xs text-muted">
+            {yesterday.total > 0
+              ? `Yesterday you did ${yesterday.done} of ${yesterday.total} block${yesterday.total === 1 ? "" : "s"}. `
+              : ""}
+            Finish all of today&apos;s blocks to grow your streak.{" "}
+            <Link href="/buddies" className="font-medium text-accent underline underline-offset-2 hover:no-underline">
+              See the leaderboard
+            </Link>
+          </p>
+
+          {/* Heads up */}
+          {(alerts.length > 0 || protectedTonight) && (
+            <div className="mt-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Heads up</h2>
+              <div className="mt-2 space-y-2">
+                {protectedTonight && (
+                  <Callout tone="success" role="status" title="Tonight is protected">
+                    No study planned today — enjoy your evening. Your blocks were moved to other days.
+                  </Callout>
+                )}
+                {alerts.map((alert) => (
+                  <Callout
+                    key={alert.id}
+                    tone={alert.tone}
+                    title={alert.title}
+                    action={
+                      alert.action.kind === "link" ? (
+                        <Link href={alert.action.href} className={buttonSecondary}>
+                          {alert.action.label}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => runAction(alert)}
+                          className={alert.action.kind === "protectTonight" ? buttonPrimary : buttonSecondary}
+                        >
+                          {alert.action.label}
+                        </button>
+                      )
+                    }
+                  >
+                    {alert.text}
+                  </Callout>
+                ))}
+              </div>
             </div>
           )}
-          {todayClasses.length > 0 && (
-            <div className="mt-2 rounded-lg border border-dashed border-line bg-surface-2 px-3 py-2 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Your classes today</p>
-              <ul className="mt-1 space-y-0.5">
-                {todayClasses.map((c) => (
-                  <li key={`${c.key}-${c.start}`} className="flex gap-3">
-                    <span className="w-24 shrink-0 tabular-nums text-muted">
-                      {c.async ? "Online" : `${c.start}–${c.end}`}
+
+          {/* Today's timeline */}
+          <div className="mt-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="today-blocks" className="text-sm font-semibold uppercase tracking-wider text-muted">
+                Today&apos;s plan
+              </h2>
+              {totalMinutes > 0 && (
+                <p className="text-xs text-muted">
+                  {doneMinutes} of {totalMinutes} min done
+                </p>
+              )}
+            </div>
+            {totalMinutes > 0 && (
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2"
+                role="progressbar"
+                aria-label="Today's progress"
+                aria-valuemin={0}
+                aria-valuemax={totalMinutes}
+                aria-valuenow={doneMinutes}
+              >
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }}
+                />
+              </div>
+            )}
+            {todayClasses.length > 0 && (
+              <div className="mt-2 rounded-lg border border-dashed border-line bg-surface-2 px-3 py-2 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Your classes today</p>
+                <ul className="mt-1 space-y-0.5">
+                  {todayClasses.map((c) => (
+                    <li key={`${c.key}-${c.start}`} className="flex gap-3">
+                      <span className="w-24 shrink-0 tabular-nums text-muted">
+                        {c.async ? "Online" : `${c.start}–${c.end}`}
+                      </span>
+                      <span className="min-w-0 break-words">
+                        {c.name}
+                        {c.number > 0 && <span className="text-muted"> · Ses. {c.number}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <ul data-testid="today-list" aria-labelledby="today-blocks" className="mt-2 divide-y divide-line">
+              {timeline.length === 0 && (
+                <li className="py-3">
+                  <p className="font-medium">Free day</p>
+                  <p className="text-sm text-muted">
+                    {protectedTonight
+                      ? "Rest is part of the plan."
+                      : "Nothing planned today. Rest, or get a little ahead if you feel like it."}
+                  </p>
+                  {!protectedTonight && getAhead && getAheadDeliverable && (
+                    <Link href={`/focus/${getAhead.id}`} className={`${buttonSecondary} mt-2`}>
+                      Get ahead: {getAheadDeliverable.title} ({getAhead.minutes} min)
+                    </Link>
+                  )}
+                </li>
+              )}
+              {timeline.map(({ block, start, title, courseName, color }) => {
+                const done = block.status === "done";
+                const d = deliverableById.get(block.deliverableId);
+                const dueIn = d ? daysBetween(today, d.dueDate) : null;
+                const inputId = `block-${block.id}`;
+                return (
+                  <li key={block.id} className="flex items-center gap-3 py-2.5">
+                    <span className="w-11 shrink-0 text-xs tabular-nums text-muted">{start}</span>
+                    <input
+                      id={inputId}
+                      type="checkbox"
+                      data-testid={`block-checkbox-${block.id}`}
+                      checked={done}
+                      onChange={() => onToggle(block.id)}
+                      className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
+                    />
+                    <label htmlFor={inputId} className="sr-only">
+                      Mark {title} as done
+                    </label>
+                    <button
+                      type="button"
+                      data-testid={`block-open-${block.id}`}
+                      onClick={() => setDetailId(block.id)}
+                      aria-haspopup="dialog"
+                      className="min-w-0 flex-1 rounded-md text-left hover:bg-surface-2 focus-visible:bg-surface-2"
+                    >
+                      <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>
+                        {d && examHeading(block, d)}
+                        {title}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-sm text-muted">
+                        <CourseDot color={color} />
+                        {courseName}
+                        {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
+                      </span>
+                    </button>
+                    <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                      <span className="rounded-md bg-surface-2 px-2 py-0.5 text-sm font-medium tabular-nums">
+                        {block.minutes} min
+                      </span>
+                      {!done && (
+                        <Link
+                          href={`/focus/${block.id}`}
+                          aria-label={`Start a focus session for ${title}`}
+                          className="rounded-md px-2 py-0.5 text-sm font-semibold text-accent hover:bg-accent-soft"
+                        >
+                          Focus
+                        </Link>
+                      )}
                     </span>
-                    <span className="min-w-0 break-words">
-                      {c.name}
-                      {c.number > 0 && <span className="text-muted"> · Ses. {c.number}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+            <p aria-live="polite" className="sr-only">
+              {announcement}
+            </p>
+            {warnings.length > 0 && (
+              <p className="mt-2 text-sm text-warn-ink">
+                {warnings.length} deadline{warnings.length === 1 ? "" : "s"} didn&apos;t fully fit in your free time.{" "}
+                <Link href="/plan" className="font-medium underline underline-offset-2 hover:no-underline">
+                  See details on Plan
+                </Link>
+              </p>
+            )}
+          </div>
+
+          {/* Coming up */}
+          <div className="mt-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Coming up · next 7 days</h2>
+            {upcomingWeek.length === 0 ? (
+              <p className="mt-2 text-sm text-muted">Nothing due in the next 7 days.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {upcomingWeek.map(({ deliverable: d, courseName, color, daysLeft }) => (
+                  <li key={d.id} className="flex items-center gap-3 text-sm">
+                    <span className="w-14 shrink-0 tabular-nums text-muted">
+                      {format(parseISO(d.dueDate), "EEE d")}
                     </span>
+                    <CourseDot color={color} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {isExam(d) ? (
+                        <Link
+                          href={`/exam/${d.id}`}
+                          className="font-medium underline underline-offset-2 hover:no-underline"
+                        >
+                          {d.title}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{d.title}</span>
+                      )}
+                      <span className="text-muted"> · {courseName}</span>
+                    </span>
+                    <span className="shrink-0 text-muted">{d.weight}%</span>
+                    {daysLeft <= 1 && (
+                      <span className="shrink-0 rounded-md border border-danger-line bg-danger-soft px-1.5 py-0.5 text-xs font-semibold text-danger">
+                        {describeDaysAway(daysLeft)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-          <ul data-testid="today-list" aria-labelledby="today-blocks" className="mt-2 divide-y divide-line">
-            {timeline.length === 0 && (
-              <li className="py-3">
-                <p className="font-medium">Free day</p>
-                <p className="text-sm text-muted">
-                  {protectedTonight
-                    ? "Rest is part of the plan."
-                    : "Nothing planned today. Rest, or get a little ahead if you feel like it."}
-                </p>
-                {!protectedTonight && getAhead && getAheadDeliverable && (
-                  <Link href={`/focus/${getAhead.id}`} className={`${buttonSecondary} mt-2`}>
-                    Get ahead: {getAheadDeliverable.title} ({getAhead.minutes} min)
-                  </Link>
-                )}
-              </li>
             )}
-            {timeline.map(({ block, start, title, courseName, color }) => {
-              const done = block.status === "done";
-              const d = deliverableById.get(block.deliverableId);
-              const dueIn = d ? daysBetween(today, d.dueDate) : null;
-              const inputId = `block-${block.id}`;
-              return (
-                <li key={block.id} className="flex items-center gap-3 py-2.5">
-                  <span className="w-11 shrink-0 text-xs tabular-nums text-muted">{start}</span>
-                  <input
-                    id={inputId}
-                    type="checkbox"
-                    data-testid={`block-checkbox-${block.id}`}
-                    checked={done}
-                    onChange={() => onToggle(block.id)}
-                    className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
-                  />
-                  <label htmlFor={inputId} className="sr-only">
-                    Mark {title} as done
-                  </label>
-                  <button
-                    type="button"
-                    data-testid={`block-open-${block.id}`}
-                    onClick={() => setDetailId(block.id)}
-                    aria-haspopup="dialog"
-                    className="min-w-0 flex-1 rounded-md text-left hover:bg-surface-2 focus-visible:bg-surface-2"
-                  >
-                    <span className={`block font-medium ${done ? "text-muted line-through" : ""}`}>
-                      {d && examHeading(block, d)}
-                      {title}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-sm text-muted">
-                      <CourseDot color={color} />
-                      {courseName}
-                      {dueIn !== null && ` · due ${describeDaysAway(dueIn)}`}
-                    </span>
-                  </button>
-                  <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="rounded-md bg-surface-2 px-2 py-0.5 text-sm font-medium tabular-nums">
-                      {block.minutes} min
-                    </span>
-                    {!done && (
-                      <Link
-                        href={`/focus/${block.id}`}
-                        aria-label={`Start a focus session for ${title}`}
-                        className="rounded-md px-2 py-0.5 text-sm font-semibold text-accent hover:bg-accent-soft"
-                      >
-                        Focus
-                      </Link>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          <p aria-live="polite" className="sr-only">
-            {announcement}
-          </p>
-          {warnings.length > 0 && (
-            <p className="mt-2 text-sm text-warn-ink">
-              {warnings.length} deadline{warnings.length === 1 ? "" : "s"} didn&apos;t fully fit in your free time.{" "}
-              <Link href="/plan" className="font-medium underline underline-offset-2 hover:no-underline">
-                See details on Plan
-              </Link>
-            </p>
-          )}
-        </div>
+          </div>
 
-        {/* Coming up */}
-        <div className="mt-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Coming up · next 7 days</h2>
-          {upcomingWeek.length === 0 ? (
-            <p className="mt-2 text-sm text-muted">Nothing due in the next 7 days.</p>
-          ) : (
-            <ul className="mt-2 space-y-1.5">
-              {upcomingWeek.map(({ deliverable: d, courseName, color, daysLeft }) => (
-                <li key={d.id} className="flex items-center gap-3 text-sm">
-                  <span className="w-14 shrink-0 tabular-nums text-muted">{format(parseISO(d.dueDate), "EEE d")}</span>
-                  <CourseDot color={color} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {isExam(d) ? (
-                      <Link
-                        href={`/exam/${d.id}`}
-                        className="font-medium underline underline-offset-2 hover:no-underline"
-                      >
-                        {d.title}
-                      </Link>
-                    ) : (
-                      <span className="font-medium">{d.title}</span>
-                    )}
-                    <span className="text-muted"> · {courseName}</span>
-                  </span>
-                  <span className="shrink-0 text-muted">{d.weight}%</span>
-                  {daysLeft <= 1 && (
-                    <span className="shrink-0 rounded-md border border-danger-line bg-danger-soft px-1.5 py-0.5 text-xs font-semibold text-danger">
-                      {describeDaysAway(daysLeft)}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+          <div className="mt-5">
+            <MascotBubble message={message} />
+          </div>
+        </section>
 
-        <div className="mt-5">
-          <MascotBubble message={message} />
+        {/* ---------------- Main action and the rest ---------------- */}
+        <div className="order-first mb-6 md:order-none md:mt-6 md:mb-0">
+          <AddDeadline today={today} />
         </div>
-      </section>
-
-      {/* ---------------- Main action and the rest ---------------- */}
-      <div className="mt-6">
-        <AddDeadline today={today} />
       </div>
 
       <div className="mt-6">

@@ -47,9 +47,8 @@ ok((await fails(A, "select public.add_friend_by_code($1)", [codeA]))?.includes("
 ok((await fails(A, "select public.add_friend_by_code('ZZZZZZ')"))?.includes("No one has"), "unknown code is rejected");
 
 const names = async (u) => (await as(u, "select display_name from public.profiles order by display_name")).rows.map((r) => r.display_name);
-ok(JSON.stringify(await names(A)) === '["Ana R","Ben"]', "A sees self + friend B, not C");
-ok(JSON.stringify(await names(B)) === '["Ana R","Ben"]', "friendship works both ways");
-ok(JSON.stringify(await names(C)) === '["Cleo"]', "C sees only herself");
+ok(JSON.stringify(await names(A)) === '["Ana R"]', "profiles: A reads only her own profile (not friend B, not C)");
+ok(JSON.stringify(await names(C)) === '["Cleo"]', "profiles: C reads only her own profile");
 
 ok((await as(A, "select code from public.invite_codes")).rows.length === 1, "A can read only her own invite code");
 ok((await fails(A, "insert into public.friendships values ($1, $2)", [A, C])) !== null, "can't insert friendships directly");
@@ -59,24 +58,41 @@ await as(B, "insert into public.weekly_stats (user_id, week, points, streak, min
 await as(C, "insert into public.weekly_stats (user_id, week, points, streak, minutes) values ($1, '2026-10-19', 300, 9, 600)", [C]);
 await as(A, "insert into public.weekly_stats (user_id, week, points) values ($1, '2026-10-19', 150) on conflict (user_id, week) do update set points = excluded.points", [A]);
 const statsA = (await as(A, "select user_id, points from public.weekly_stats order by points desc")).rows;
-ok(statsA.length === 2 && statsA[0].points === 150, "A sees her (updated) stats and B's, not C's");
+ok(statsA.length === 1 && statsA[0].points === 150, "weekly_stats: A reads only her own (updated) row");
 ok((await fails(A, "insert into public.weekly_stats (user_id, week, points) values ($1, '2026-10-19', 999)", [C])) !== null, "A can't write stats for someone else");
 await as(A, "update public.weekly_stats set points = 0 where user_id = $1", [B]);
 ok((await as(B, "select points from public.weekly_stats")).rows.some((r) => r.points === 90), "A can't change B's stats");
 ok((await fails(A, "update public.profiles set display_name = 'x' where id = $1 returning id", [B])) === null &&
    (await names(B)).includes("Ben"), "A can't rename B");
 
-const joined = (await as(A, "select s.points, p.display_name from public.weekly_stats s join public.profiles p on p.id = s.user_id where s.week = '2026-10-19' order by s.points desc")).rows;
-ok(joined.map((r) => r.display_name).join(",") === "Ana R,Ben", "leaderboard join works for A");
+// --- the leaderboard: one server-side function, aggregates of connected users only ---
+const board = async (u) => (await as(u, "select * from public.my_leaderboard('2026-10-19')")).rows;
+const boardA = await board(A);
+ok(boardA.map((r) => r.display_name).join(",") === "Ana R,Ben", "leaderboard: A sees herself and B (connected by invite), not C");
+ok((await board(B)).map((r) => r.display_name).join(",") === "Ana R,Ben", "leaderboard: works both ways for B");
+ok((await board(C)).map((r) => r.display_name).join(",") === "Cleo", "leaderboard: C (not connected) sees only herself");
+ok(
+  JSON.stringify(Object.keys(boardA[0]).sort()) === JSON.stringify(["display_name", "id", "is_me", "minutes", "points", "streak"]),
+  "leaderboard returns only display name, points, streak, minutes (+ id, is_me) — no plans, emails or codes",
+);
+ok(boardA.find((r) => r.display_name === "Ben").points === 90 && boardA[0].is_me === true, "leaderboard has B's weekly totals and marks me");
+await as(A, "select public.add_friend_by_code($1)", [(await as(C, "select code from public.invite_codes")).rows[0].code]);
+ok((await board(A)).some((r) => r.display_name === "Cleo"), "leaderboard: C appears for A only after A enters C's invite code");
+await as(A, "select public.remove_friend($1)", [C]);
+ok(!(await board(A)).some((r) => r.display_name === "Cleo"), "leaderboard: removing C hides her again");
 
 ok((await fails(A, "select public.add_friend_by_code('x')")) !== null, "anon-like junk code fails");
 await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;");
 let anonBlocked = false; try { await db.query("select * from public.profiles"); } catch { anonBlocked = true; }
 await db.exec("reset role;");
 ok(anonBlocked, "logged-out visitors can't read anything");
+await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;");
+let anonBoard = false; try { await db.query("select * from public.my_leaderboard('2026-10-19')"); } catch { anonBoard = true; }
+await db.exec("reset role;");
+ok(anonBoard, "logged-out visitors can't call the leaderboard");
 
 await as(A, "select public.remove_friend($1)", [B]);
-ok(JSON.stringify(await names(A)) === '["Ana R"]' && JSON.stringify(await names(B)) === '["Ben"]', "remove_friend removes both directions");
+ok((await board(A)).length === 1 && (await board(B)).length === 1, "remove_friend removes both directions");
 
 // --- planner_state: each user's plan is private ---
 await as(A, "insert into public.planner_state (state) values ($1)", [JSON.stringify({ deliverables: [{ title: "QA item A" }] })]);

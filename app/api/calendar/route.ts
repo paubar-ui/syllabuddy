@@ -6,7 +6,7 @@ import { z } from "zod";
 import { normalizeCalendarUrl } from "@/lib/blackboard";
 import { createRateLimiter } from "@/lib/rateLimit";
 import { checkPublicHttpsUrl } from "@/lib/safeUrl";
-import { supabaseKey, supabaseUrl } from "@/lib/supabase";
+import { userIdFrom } from "@/lib/serverAuth";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
@@ -14,23 +14,6 @@ const RequestSchema = z.object({ url: z.string().max(2000) });
 const rateLimited = createRateLimiter(20, 10 * 60 * 1000);
 
 const error = (status: number, code: string, message: string) => Response.json({ error: code, message }, { status });
-
-/** Who is asking: the Supabase user behind the login token, or null. */
-async function userIdFrom(request: Request): Promise<string | null> {
-  const auth = request.headers.get("authorization");
-  if (!auth?.startsWith("Bearer ") || !supabaseUrl || !supabaseKey) return null;
-  try {
-    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: supabaseKey, Authorization: auth },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    const user = (await res.json()) as { id?: string };
-    return user.id ?? null;
-  } catch {
-    return null;
-  }
-}
 
 async function readLimited(res: Response): Promise<string | null> {
   if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) return null;

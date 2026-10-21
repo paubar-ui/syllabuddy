@@ -72,6 +72,10 @@ function CoursesContent() {
         <AssistantImport
           today={today}
           onCancel={() => setImporting(false)}
+          onTypeInstead={() => {
+            setImporting(false);
+            setAdding(true);
+          }}
           onDone={(message) => {
             setImporting(false);
             setAnnouncement(message);
