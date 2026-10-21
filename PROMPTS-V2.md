@@ -1,5 +1,30 @@
 # Syllabuddy v2 — upgrade prompts
 
+## V2-7 — Smart input without an API key (do this next)
+
+```
+Our rule-based syllabus parser makes too many mistakes, and Blackboard import groups sessions but doesn't create deadlines. Replace both with two reliable, no-API-key flows:
+
+A) "Import with your AI assistant" (copy–paste round trip)
+- On Add course / Add deadlines, a button "Import with ChatGPT or Claude".
+- Step 1: we show a ready-made prompt with a Copy button. The prompt asks the assistant to read the syllabus the student pastes and return ONLY a code block in a strict format we define: course name, grade scale, and one line per deliverable (title | type | date YYYY-MM-DD or "Session N" | weight %), plus one line per session (session number | topic | key concepts | problem set). Include a short example in the prompt.
+- Step 2: the student pastes their syllabus into their own assistant, copies the answer, and pastes it back into a text box.
+- Step 3: we parse that strict format (zod-validated, tolerant of extra spaces/markdown fences), show the review table, the student fixes anything, then saves. Clear error messages pointing to the line that failed.
+- Unit-test the parser with good and broken inputs. Add a "Paste sample" button so the bot can test it.
+
+B) Blackboard sessions → dates, deterministically
+- After Blackboard calendar import (sessions grouped by course and numbered), every deadline form gets a "When" field with two options: a date picker OR "Session [dropdown]" for that course, showing "Session 15 · Tue 17 Nov".
+- In flow A, any deliverable given as "Session N" gets its date from the Blackboard sessions automatically (shown as "Date from Blackboard" in the review table). If Blackboard isn't connected, ask the user for the date.
+- Session topics from flow A attach to the Blackboard session dates, so exam prep plans (V2-6) know which topic is taught when.
+
+C) Faster manual entry
+- Quick-add line: typing "PEPE midterm 30/10 30%" or "Finance PS4 session 12 5%" fills the form (simple, unit-tested parser), still editable.
+
+Remove the old automatic syllabus parser from the UI (keep paste-topics-for-exam). Keep all data-testids, run lint/tests/build, then tell me what to test.
+```
+
+---
+
 Paste one at a time into Claude Code, test, then let it commit & push. Order matters: **V2-1 first** (it protects your grade).
 
 ---

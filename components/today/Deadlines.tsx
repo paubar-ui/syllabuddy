@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { create } from "zustand";
 import { CourseDot, EmptyState, SectionHeader } from "@/components/kit";
-import { buttonPrimary, input, label } from "@/components/ui";
+import { buttonPrimary, buttonSecondary, input, label } from "@/components/ui";
+import { WhenField, dateOf, pickableSessions, type WhenValue } from "@/components/WhenField";
+import { calendarCourseFor } from "@/lib/blackboard";
+import { parseQuickAdd } from "@/lib/quickAdd";
 import { addDaysISO, daysBetween, describeDaysAway } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { flushPlan } from "@/lib/planSync";
@@ -19,11 +22,36 @@ export function AddDeadline({ today }: { today: string }) {
   const courses = useStore((s) => s.courses);
   const addDeadline = useStore((s) => s.addDeadline);
   const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const calendar = useStore((s) => s.calendar);
+  const [when, setWhen] = useState<WhenValue>({ date: "" });
   const [courseId, setCourseId] = useState("");
+  const [quick, setQuick] = useState("");
+  const effectiveCourse = courseId || courses[0]?.id || "";
+  const sessions = pickableSessions(calendarCourseFor(calendar, effectiveCourse)?.sessions, today);
   const [weight, setWeight] = useState("");
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  function fillFromQuick() {
+    if (!quick.trim()) return;
+    const q = parseQuickAdd(quick, today, courses);
+    const course = q.courseId ?? effectiveCourse;
+    const courseSessions = pickableSessions(calendarCourseFor(calendar, course)?.sessions, today);
+    setTitle(q.title);
+    if (q.courseId) setCourseId(q.courseId);
+    if (q.session && courseSessions.some((s) => s.number === q.session)) setWhen({ session: q.session });
+    else if (q.dueDate) setWhen({ date: q.dueDate });
+    if (q.weight !== undefined) setWeight(String(q.weight));
+    setQuick("");
+    setStatus(
+      q.session && !courseSessions.some((s) => s.number === q.session)
+        ? {
+            error: true,
+            text: `Session ${q.session} isn't in your Blackboard calendar for that course — pick the date.`,
+          }
+        : { error: false, text: "Filled in — check the fields, then press Add deadline." },
+    );
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,13 +67,15 @@ export function AddDeadline({ today }: { today: string }) {
       {
         id,
         title,
-        dueDate: dueDate || undefined,
+        dueDate: dateOf(when, sessions) || undefined,
         courseId: courseId || undefined,
         weight: Number.isFinite(w) ? w : undefined,
+        ...("session" in when ? { sessionRef: when.session } : {}),
       },
       today,
     );
     setTitle("");
+    setWhen({ date: "" });
     await flushPlan(); // saved to your account before it shows up in the list
     useSaving.setState((s) => ({ ids: s.ids.filter((x) => x !== id) }));
     setSaving(false);
@@ -90,26 +120,52 @@ export function AddDeadline({ today }: { today: string }) {
 
         <details className="mt-3 text-sm">
           <summary className="cursor-pointer font-medium text-accent">
-            More options (date, course, weight) — optional
+            More options (quick add, date, course, weight) — optional
           </summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <div>
-              <label htmlFor="deadline-date" className={label}>
-                Due date
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label htmlFor="quick-add" className={label}>
+                Quick add
               </label>
               <input
-                id="deadline-date"
-                type="date"
-                min={today}
+                id="quick-add"
+                data-testid="quick-add-input"
                 className={input}
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                aria-describedby="deadline-date-help"
+                value={quick}
+                onChange={(e) => setQuick(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    fillFromQuick();
+                  }
+                }}
+                placeholder="e.g. PEPE midterm 30/10 30% · Finance PS4 session 12 5%"
+                autoComplete="off"
+                aria-describedby="quick-add-help"
               />
-              <p id="deadline-date-help" className="mt-1 text-xs text-muted">
-                Default: {format(parseISO(addDaysISO(today, 7)), "EEE d MMM")} (in a week)
+              <p id="quick-add-help" className="mt-1 text-xs text-muted">
+                Type it the way you&apos;d note it down; we fill in the fields below, and you can still change them.
               </p>
             </div>
+            <button
+              type="button"
+              data-testid="quick-add-fill"
+              className={buttonSecondary}
+              disabled={!quick.trim()}
+              onClick={fillFromQuick}
+            >
+              Fill in
+            </button>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <WhenField
+              id="deadline-date"
+              value={when}
+              onChange={setWhen}
+              sessions={sessions}
+              today={today}
+              dateHelp={`Default: ${format(parseISO(addDaysISO(today, 7)), "EEE d MMM")} (in a week)`}
+            />
             <div>
               <label htmlFor="deadline-course" className={label}>
                 Course
@@ -118,7 +174,10 @@ export function AddDeadline({ today }: { today: string }) {
                 id="deadline-course"
                 className={input}
                 value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
+                onChange={(e) => {
+                  setCourseId(e.target.value);
+                  setWhen({ date: "date" in when ? when.date : "" });
+                }}
               >
                 <option value="">{courses[0]?.name ?? "My deadlines"}</option>
                 {courses.slice(1).map((c) => (
@@ -273,7 +332,11 @@ export function DeadlineList({ today }: { today: string }) {
                           >
                             Delete
                           </button>
-                          <button type="button" onClick={() => setConfirmId(null)} className="text-sm text-muted underline">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmId(null)}
+                            className="text-sm text-muted underline"
+                          >
                             Keep
                           </button>
                         </span>

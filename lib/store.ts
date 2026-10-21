@@ -127,6 +127,7 @@ export interface AddDeadlineInput {
   courseId?: string; // default: your first course, or a new "My deadlines" course
   weight?: number; // default: 10% of the grade
   type?: DeliverableType; // default: recognised from the title ("Finance midterm" → midterm)
+  sessionRef?: number; // due in Blackboard session N: the date follows that class if it moves
 }
 
 const DATA_KEYS = [
@@ -536,7 +537,7 @@ export const useStore = create<SyllabuddyState>()((set, get) => {
       set({ ...base, ...clean });
     },
 
-    addDeadline: ({ id, title, dueDate, courseId, weight, type }, today = todayISO()) => {
+    addDeadline: ({ id, title, dueDate, courseId, weight, type, sessionRef }, today = todayISO()) => {
       const s = get();
       let courses = s.courses;
       let course = courses.find((c) => c.id === courseId) ?? courses[0];
@@ -553,6 +554,7 @@ export const useStore = create<SyllabuddyState>()((set, get) => {
         weight: weight !== undefined && weight >= 0 && weight <= 100 ? weight : 10,
         loggedMinutes: 0,
         done: false,
+        ...(sessionRef ? { sessionRef, dateFromCalendar: true } : {}),
       };
       const examInfo = examInfoFor(course.examInfo, base.type);
       const deliverable: Deliverable = {

@@ -8,11 +8,15 @@ import { useState } from "react";
 import { CourseDot, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
 import { buttonPrimary, buttonSecondary, card, input, label, page } from "@/components/ui";
 import { addDaysISO, daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
+import { WhenField, dateOf, pickableSessions, type WhenValue } from "@/components/WhenField";
+import { calendarCourseFor } from "@/lib/blackboard";
 import { isExam } from "@/lib/examPlan";
+import { parseQuickAdd } from "@/lib/quickAdd";
 import { DELIVERABLE_TYPES } from "@/lib/extraction";
 import { useStore } from "@/lib/store";
 import type { Course, Deliverable, DeliverableType, Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
+import { AssistantImport } from "./AssistantImport";
 import { EFFORT_LABELS, GradeCalculator, ScoreInput, TYPE_LABELS, num, parseNumber } from "./shared";
 
 type SortKey = "due" | "weight" | "type";
@@ -40,6 +44,7 @@ function FolderContent() {
   const [sort, setSort] = useState<SortKey>("due");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [importing, setImporting] = useState(false);
 
   if (!course) {
     return (
@@ -74,7 +79,33 @@ function FolderContent() {
         )}h studied`}
       />
 
-      <AddDeadlineRow course={course} today={today} onAdded={(t) => setAnnouncement(`${t} added to ${course.name}.`)} />
+      {importing ? (
+        <AssistantImport
+          target={course}
+          today={today}
+          onCancel={() => setImporting(false)}
+          onDone={(message) => {
+            setImporting(false);
+            setAnnouncement(message);
+          }}
+        />
+      ) : (
+        <>
+          <AddDeadlineRow
+            course={course}
+            today={today}
+            onAdded={(t) => setAnnouncement(`${t} added to ${course.name}.`)}
+          />
+          <button
+            type="button"
+            data-testid="assistant-import-button"
+            onClick={() => setImporting(true)}
+            className="mt-2 text-sm font-medium text-accent underline underline-offset-2 hover:no-underline"
+          >
+            Or import all its deadlines with ChatGPT or Claude
+          </button>
+        </>
+      )}
       <p aria-live="polite" className="mt-2 text-sm text-success">
         {announcement}
       </p>
@@ -276,11 +307,29 @@ function AddDeadlineRow({
   onAdded: (title: string) => void;
 }) {
   const addDeadline = useStore((s) => s.addDeadline);
+  const calendar = useStore((s) => s.calendar);
+  const sessions = pickableSessions(calendarCourseFor(calendar, course.id)?.sessions, today);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<DeliverableType>("homework");
-  const [due, setDue] = useState(() => addDaysISO(today, 7));
+  const [when, setWhen] = useState<WhenValue>(() => ({ date: addDaysISO(today, 7) }));
   const [weight, setWeight] = useState("");
+  const [quick, setQuick] = useState("");
   const [error, setError] = useState("");
+
+  function fillFromQuick() {
+    const q = parseQuickAdd(quick, today, [{ id: course.id, name: course.name }]);
+    setTitle(q.title);
+    if (q.type) setType(q.type);
+    if (q.session && sessions.some((s) => s.number === q.session)) setWhen({ session: q.session });
+    else if (q.dueDate) setWhen({ date: q.dueDate });
+    if (q.weight !== undefined) setWeight(String(q.weight));
+    setError(
+      q.session && !sessions.some((s) => s.number === q.session)
+        ? `Session ${q.session} isn't in your Blackboard calendar for this course — pick the date.`
+        : "",
+    );
+    setQuick("");
+  }
 
   return (
     <form
@@ -289,10 +338,21 @@ function AddDeadlineRow({
       onSubmit={(e) => {
         e.preventDefault();
         const w = parseNumber(weight);
+        const due = dateOf(when, sessions);
         if (!title.trim()) return setError("Give the deadline a title.");
         if (!due || due < today) return setError("Pick a due date from today on.");
         if (w !== undefined && (Number.isNaN(w) || w < 0 || w > 100)) return setError("Weight must be 0–100%.");
-        addDeadline({ title, type, dueDate: due, courseId: course.id, weight: w ?? 10 }, today);
+        addDeadline(
+          {
+            title,
+            type,
+            dueDate: due,
+            courseId: course.id,
+            weight: w ?? 10,
+            ...("session" in when ? { sessionRef: when.session } : {}),
+          },
+          today,
+        );
         onAdded(title.trim());
         setTitle("");
         setType("homework");
@@ -303,7 +363,38 @@ function AddDeadlineRow({
       <h2 id="add-deadline-title" className="text-base font-semibold">
         Add a deadline
       </h2>
-      <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_5.5rem_auto] sm:items-end">
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <label htmlFor="dl-quick" className={label}>
+            Quick add <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <input
+            id="dl-quick"
+            data-testid="quick-add-input"
+            className={input}
+            value={quick}
+            onChange={(e) => setQuick(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (quick.trim()) fillFromQuick();
+              }
+            }}
+            placeholder={sessions.length ? "e.g. midterm session 15 30%" : "e.g. midterm 30/10 30%"}
+            autoComplete="off"
+          />
+        </div>
+        <button
+          type="button"
+          data-testid="quick-add-fill"
+          className={buttonSecondary}
+          disabled={!quick.trim()}
+          onClick={fillFromQuick}
+        >
+          Fill in
+        </button>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1.6fr)_5.5rem_auto] sm:items-end">
         <div>
           <label htmlFor="dl-title" className={label}>
             Title
@@ -335,19 +426,7 @@ function AddDeadlineRow({
             ))}
           </select>
         </div>
-        <div>
-          <label htmlFor="dl-due" className={label}>
-            Due date
-          </label>
-          <input
-            id="dl-due"
-            type="date"
-            min={today}
-            className={input}
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-          />
-        </div>
+        <WhenField id="dl-due" value={when} onChange={setWhen} sessions={sessions} today={today} />
         <div>
           <label htmlFor="dl-weight" className={label}>
             Weight %

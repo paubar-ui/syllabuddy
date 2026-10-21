@@ -11,6 +11,7 @@ import { paceInsights } from "@/lib/pace";
 import { useStore } from "@/lib/store";
 import type { Effort } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
+import { AssistantImport } from "./AssistantImport";
 import { EFFORT_LABELS } from "./shared";
 
 export function CoursesView() {
@@ -34,6 +35,7 @@ function CoursesContent() {
   const insights = paceInsights(pace);
   const [today] = useState(todayISO);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
   return (
@@ -42,20 +44,42 @@ function CoursesContent() {
         title="My courses"
         description="One folder per course. Open a folder to add its deadlines, see them in a table, enter your scores and check what you need for your target grade."
         action={
-          !adding && (
-            <button
-              type="button"
-              data-testid="add-course-button"
-              onClick={() => setAdding(true)}
-              className={buttonPrimary}
-            >
-              + Add course
-            </button>
+          !adding &&
+          !importing && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                data-testid="add-course-button"
+                onClick={() => setAdding(true)}
+                className={buttonPrimary}
+              >
+                + Add course
+              </button>
+              <button
+                type="button"
+                data-testid="assistant-import-button"
+                onClick={() => setImporting(true)}
+                className={buttonSecondary}
+              >
+                Import with ChatGPT or Claude
+              </button>
+            </div>
           )
         }
       />
 
-      {(adding || courses.length === 0) && (
+      {importing && (
+        <AssistantImport
+          today={today}
+          onCancel={() => setImporting(false)}
+          onDone={(message) => {
+            setImporting(false);
+            setAnnouncement(message);
+          }}
+        />
+      )}
+
+      {!importing && (adding || courses.length === 0) && (
         <AddCourseForm
           replacesSample={isDemo}
           onCancel={courses.length ? () => setAdding(false) : undefined}

@@ -469,3 +469,83 @@ test("Blackboard calendar: classes on Plan and Today, deadlines added with a cli
   await expect(page.getByLabel("Syllabuddy course for STATISTICS")).not.toHaveValue("");
   expect(errors).toEqual([]);
 });
+
+test("V2-7: import with your AI assistant, Blackboard sessions as dates, quick add", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await signUp(page, "aiimport");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const inDays = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d;
+  };
+
+  // A) Copy the prompt, paste the sample answer, review
+  await page.getByRole("link", { name: "Courses", exact: true }).filter({ visible: true }).first().click();
+  await page.getByTestId("assistant-import-button").click();
+  const box = page.getByTestId("assistant-import");
+  await expect(box.getByLabel("Prompt for your AI assistant")).toHaveValue(/DELIVERABLE: <title> \| <type>/);
+  await box.getByTestId("assistant-answer").fill("COURSE: Broken\nDELIVERABLE: Essay | essay | next Friday | 10%");
+  await box.getByTestId("read-answer").click();
+  await expect(box.getByRole("alert")).toContainText('Line 2: the date "next Friday" should look like 2026-11-15');
+  await box.getByTestId("paste-sample").click();
+  await box.getByTestId("read-answer").click();
+  const review = page.getByTestId("assistant-review");
+  await expect(review.getByLabel("Course name")).toHaveValue("Behavioral Economics");
+  await expect(review.getByText("The syllabus says session 16 — pick its date.")).toBeVisible();
+  // Without Blackboard, a "Session N" deadline needs its date
+  await review.getByTestId("assistant-save").click();
+  await expect(review.getByRole("alert")).toContainText("pick its date");
+  for (const t of ["Reading reflection", "Final project", "Final exam"]) await review.getByLabel(`Import ${t}`).uncheck();
+  await review.locator('input[type="date"]').first().fill(iso(inDays(20)));
+  await expect(review.getByText("4 session topics — saved for exam prep")).toBeVisible();
+  await expectNoAxeViolations(page, "/courses assistant review");
+  await review.getByTestId("assistant-save").click();
+  await expect(page.getByText("Imported 1 course with 1 deadline.")).toBeVisible();
+
+  // B) Connect Blackboard: the folder's deadline form offers "Session N · date"
+  const first = inDays(1);
+  const local = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "BEGIN:VEVENT",
+    "UID:beh@test",
+    "SUMMARY:BEHAVIORAL ECONOMICS Live in-person ",
+    `DTSTART:${local(first)}T100000`,
+    `DTEND:${local(first)}T112000`,
+    "RRULE:FREQ=WEEKLY;COUNT=12",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  await page.getByRole("link", { name: "Plan", exact: true }).filter({ visible: true }).first().click();
+  await page
+    .getByTestId("calendar-file-input")
+    .setInputFiles({ name: "bb.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
+  await expect(page.getByText("Blackboard calendar connected")).toBeVisible();
+  await page.getByRole("link", { name: "Courses", exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole("link", { name: /^Behavioral Economics/ }).click();
+  await page.getByRole("radio", { name: "Blackboard session" }).check();
+  await page.getByLabel("Session", { exact: true }).selectOption("3");
+  await page.getByTestId("course-deadline-title").fill("Quiz 1");
+  await page.getByTestId("course-deadline-add").click();
+  await expect(page.getByTestId("course-deadlines")).toContainText("Quiz 1");
+
+  // …and an import of "Session N" deadlines takes the date from Blackboard
+  await page.getByTestId("assistant-import-button").click();
+  await page.getByTestId("paste-sample").click();
+  await page.getByTestId("read-answer").click();
+  await expect(page.getByTestId("assistant-review").getByText(/^Date from Blackboard: Session 9 ·/)).toBeVisible();
+
+  // C) Quick add on Today fills the form
+  await page.getByRole("link", { name: "Today" }).filter({ visible: true }).first().click();
+  await page.getByText("More options (quick add, date, course, weight) — optional").click();
+  await page.getByTestId("quick-add-input").fill("Behavioral essay 30%");
+  await page.getByTestId("quick-add-fill").click();
+  await expect(page.getByTestId("core-input")).toHaveValue("Essay");
+  await expect(page.getByLabel("Weight (% of grade)")).toHaveValue("30");
+  await page.getByTestId("core-submit").click();
+  await expect(page.getByTestId("core-item").filter({ hasText: "Essay" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
