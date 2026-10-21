@@ -21,6 +21,8 @@ async function shoot(viewport, shots) {
   await page.getByTestId("today-list").waitFor();
   // Tick one block so points and progress show something.
   await page.locator('[data-testid^="block-checkbox-"]').first().check();
+  // Let the plan finish saving before the next full page load.
+  await page.waitForTimeout(3000);
   for (const [name, path, prepare] of shots) {
     await page.goto(base + path);
     await page.locator("h1").first().waitFor();
@@ -43,18 +45,29 @@ async function shoot(viewport, shots) {
 
 await shoot({ width: 1280, height: 800 }, [
   ["today", "/app"],
-  ["plan", "/plan"],
+  ["plan", "/plan", (page) => page.getByRole("heading", { name: /^Week of/ }).evaluate((el) => el.scrollIntoView())],
   [
     "courses",
     "/courses",
     async (page) => {
-      const calculator = page.getByTestId("grade-calculator");
-      await calculator.locator("xpath=ancestor::section[1]").getByLabel("Score (/10)").first().fill("6");
-      await calculator.scrollIntoViewIfNeeded();
+      // A course folder: deadlines table and grade calculator.
+      await page.locator('[data-testid^="course-folder-"]').first().click();
+      await page.getByTestId("course-deadlines").getByLabel("Score (/10)").first().fill("6");
+      await page.getByTestId("grade-calculator").getByLabel(/Target grade/).fill("7");
+      await page.getByTestId("course-deadlines").scrollIntoViewIfNeeded();
+    },
+  ],
+  [
+    "exam",
+    "/courses",
+    async (page) => {
+      await page.getByRole("link", { name: /^Statistics/ }).click();
+      await page.locator('[data-testid^="exam-prep-link-"]').first().click();
+      await page.getByTestId("exam-prep").waitFor();
+      await page.getByRole("heading", { name: "Day by day" }).scrollIntoViewIfNeeded();
     },
   ],
   ["panic", "/panic"],
-  ["buddies", "/buddies"],
 ]);
 
 await shoot({ width: 390, height: 844 }, [["mobile-today", "/app"]]);
