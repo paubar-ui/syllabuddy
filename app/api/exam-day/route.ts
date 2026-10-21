@@ -1,5 +1,5 @@
 // POST /api/exam-day — optional AI explanation of one exam prep day (V2-6).
-// Without ANTHROPIC_API_KEY this returns 501; the plan built from the syllabus works on its own.
+// Without ANTHROPIC_API_KEY this returns 501; the plan built from your pasted content works on its own.
 import Anthropic from "@anthropic-ai/sdk";
 import { connection } from "next/server";
 import { z } from "zod";

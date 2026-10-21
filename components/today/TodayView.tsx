@@ -27,7 +27,7 @@ import { weeklyStats } from "@/lib/leaderboard";
 import { isExam } from "@/lib/examPlan";
 import { getMascotMessage, pickSituation } from "@/lib/mascot";
 import { blockDetail } from "@/lib/sessionDetail";
-import { studyStartMinute } from "@/lib/blackboard";
+import { classesOn, studyStartMinute } from "@/lib/blackboard";
 import { useStore } from "@/lib/store";
 import type { Deliverable, StudyBlock } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
@@ -108,9 +108,9 @@ function TodayContent() {
             <li className="flex gap-3">
               <Step n={2} />
               <span>
-                <span className="font-medium">Add a whole course from its syllabus.</span>{" "}
+                <span className="font-medium">Add your courses.</span>{" "}
                 <span className="text-muted">
-                  Paste the text or upload the PDF and we find every deadline and grade weight for you.
+                  Name each course, say how hard it is for you and add its deadlines — the plan is built around them.
                 </span>
               </span>
             </li>
@@ -125,8 +125,8 @@ function TodayContent() {
             </li>
           </ol>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <Link href="/onboarding" data-testid="start-button" className={buttonSecondary}>
-              Add a course from a syllabus
+            <Link href="/courses" data-testid="start-button" className={buttonSecondary}>
+              Add your courses
             </Link>
             <DemoButton label="Load a sample semester" variant="secondary" />
           </div>
@@ -137,6 +137,7 @@ function TodayContent() {
   }
 
   // Study starts at 18:00, or 15 minutes after an evening class (Blackboard calendar).
+  const todayClasses = classesOn(calendar, today, courses);
   const timeline = todayTimeline(blocks, deliverables, courses, today, studyStartMinute(calendar, today) / 60);
   const todayBlocks = timeline.map((t) => t.block);
   const doneMinutes = todayBlocks.filter((b) => b.status === "done").reduce((s, b) => s + b.minutes, 0);
@@ -246,8 +247,8 @@ function TodayContent() {
           {isDemo && (
             <p className="rounded-md border border-info-line bg-info-soft px-2.5 py-1 text-xs font-medium text-info-ink">
               Sample semester ·{" "}
-              <Link href="/onboarding" className="underline underline-offset-2 hover:no-underline">
-                use my own syllabi
+              <Link href="/courses" className="underline underline-offset-2 hover:no-underline">
+                add my own courses
               </Link>
             </p>
           )}
@@ -333,6 +334,24 @@ function TodayContent() {
                 className="h-full rounded-full bg-accent"
                 style={{ width: `${(doneMinutes / totalMinutes) * 100}%` }}
               />
+            </div>
+          )}
+          {todayClasses.length > 0 && (
+            <div className="mt-2 rounded-lg border border-dashed border-line bg-surface-2 px-3 py-2 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Your classes today</p>
+              <ul className="mt-1 space-y-0.5">
+                {todayClasses.map((c) => (
+                  <li key={`${c.key}-${c.start}`} className="flex gap-3">
+                    <span className="w-24 shrink-0 tabular-nums text-muted">
+                      {c.async ? "Online" : `${c.start}–${c.end}`}
+                    </span>
+                    <span className="min-w-0 break-words">
+                      {c.name}
+                      {c.number > 0 && <span className="text-muted"> · Ses. {c.number}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <ul data-testid="today-list" aria-labelledby="today-blocks" className="mt-2 divide-y divide-line">

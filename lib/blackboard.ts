@@ -3,13 +3,15 @@
 // titles have them, else 1..N in date order), skips cancelled classes, matches them to your
 // Syllabuddy courses, turns "Session 15" into a real date and marks class hours as busy.
 import type { CalendarEvent } from "./calendarIcs";
-import type { CalendarCourse, CalendarSync, ClassSession, Course, Deliverable } from "./types";
+import type { CalendarCourse, CalendarDeadline, CalendarSync, ClassSession, Course, Deliverable } from "./types";
 
 /** Study blocks are placed from 18:00 (like Today and the calendar export). */
 export const STUDY_START_MINUTE = 18 * 60;
 export const CLASS_BUFFER_MINUTES = 15;
 /** Re-read the calendar link at most this often when the app opens. */
 export const RESYNC_HOURS = 6;
+/** Bump when calendars must be read again with improved rules (old data is re-read on open). */
+export const CALENDAR_VERSION = 2;
 
 // Deadlines and exams in the calendar are not class meetings.
 const NOT_A_CLASS =
@@ -72,7 +74,33 @@ export function courseNameOf(event: CalendarEvent): string {
 export function isClassEvent(event: CalendarEvent): boolean {
   if (event.allDay) return false;
   const minutes = Math.round((new Date(`${event.end}:00`).getTime() - new Date(`${event.start}:00`).getTime()) / 60000);
-  return minutes >= 30 && minutes <= 300 && !NOT_A_CLASS.test(event.summary) && !CANCELLED.test(event.summary);
+  if (minutes < 30 || minutes > 300 || CANCELLED.test(event.summary)) return false;
+  // A title with a session number is a class, even "LANGUAGES EXAM PREPARATION (Ses. 2)".
+  return sessionNumbersOf(event.summary).length > 0 || !NOT_A_CLASS.test(event.summary);
+}
+
+/**
+ * Deadline events: hand-ins and exams (usually zero-length, like 23:59–23:59), not classes,
+ * not cancelled, not holidays. Blackboard doesn't say which course they belong to.
+ */
+export function extractDeadlines(events: CalendarEvent[], today: string): CalendarDeadline[] {
+  const seen = new Set<string>();
+  const out: CalendarDeadline[] = [];
+  for (const e of events) {
+    if (isClassEvent(e) || CANCELLED.test(e.summary) || e.start.slice(0, 10) < today) continue;
+    const zeroLength = !e.allDay && e.start === e.end;
+    if (!zeroLength && !NOT_A_CLASS.test(e.summary)) continue;
+    const title = e.summary
+      .replace(/^deadline of\s+/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const date = e.start.slice(0, 10);
+    const id = `${title.toLowerCase()}|${date}`;
+    if (!title || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ uid: e.uid, title: title.slice(0, 200), date });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Session numbers written in a title: "(Ses. 10)" → [10], "(Sessions 3-4)" → [3, 4]. */
@@ -264,7 +292,7 @@ export function applyCalendar(
 /** Re-read the link when the app opens? Only for links, and at most every 6 hours. */
 export function needsResync(sync: CalendarSync | null, now: Date): boolean {
   if (!sync?.url) return false;
-  if (!sync.lastSync) return true;
+  if (!sync.lastSync || sync.version !== CALENDAR_VERSION) return true;
   return now.getTime() - new Date(sync.lastSync).getTime() >= RESYNC_HOURS * 3600 * 1000;
 }
 
@@ -277,4 +305,41 @@ export function normalizeCalendarUrl(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+export interface ClassOnDay {
+  key: string;
+  name: string; // your Syllabuddy course name when matched, else Blackboard's
+  courseId?: string;
+  number: number; // 0 = extra / unnumbered
+  start: string;
+  end: string;
+  async: boolean;
+}
+
+/** The classes on one day, in time order (for Plan and Today). */
+export function classesOn(
+  sync: CalendarSync | null,
+  date: string,
+  courses: Pick<Course, "id" | "name">[],
+): ClassOnDay[] {
+  const out: ClassOnDay[] = [];
+  for (const cc of sync?.courses ?? []) {
+    const courseId = sync?.mapping[cc.key] || undefined;
+    const name = courses.find((c) => c.id === courseId)?.name ?? cc.name;
+    const seen = new Set<string>();
+    for (const s of cc.sessions) {
+      if (s.date !== date) continue;
+      // A double session ("Ses. 3-4") is one class: show it once with its first number.
+      if (seen.has(s.start)) continue;
+      seen.add(s.start);
+      out.push({ key: cc.key, name, courseId, number: s.number, start: s.start, end: s.end, async: Boolean(s.async) });
+    }
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
+}
+
+/** Calendar deadlines you haven't added or ignored yet. */
+export function openCalendarDeadlines(sync: CalendarSync | null, today: string): CalendarDeadline[] {
+  return (sync?.deadlines ?? []).filter((d) => d.date >= today && !sync?.handled?.[d.uid]);
 }

@@ -19,11 +19,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Syllabuddy — your syllabi, turned into a daily study plan",
+    default: "Syllabuddy — your deadlines, turned into a daily study plan",
     template: "%s · Syllabuddy",
   },
   description:
-    "Upload your syllabi, tell us how hard each class is for you, and get a daily study plan that keeps you on track — with streaks, a mascot coach and friends to compete with.",
+    "Add your deadlines, tell us how hard each class is for you, and get a daily study plan that keeps you on track — with streaks, a mascot coach and friends to compete with.",
 };
 
 export const viewport: Viewport = {

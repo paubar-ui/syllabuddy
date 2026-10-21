@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Set up your semester" };
-
+// Courses are added on My courses now (one folder per course); old links land there.
 export default function OnboardingPage() {
-  return <OnboardingWizard />;
+  redirect("/courses");
 }

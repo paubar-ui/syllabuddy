@@ -46,6 +46,8 @@ export const DEFAULT_DURATION = 90;
 
 /** Which sessions the exam covers: as stated, else by date, else a sensible guess. */
 export function examScope(exam: Deliverable, course: Course): { sessions: CourseSession[]; guessed: boolean } {
+  // Content you pasted for this exam is exactly what it covers.
+  if (exam.exam?.topics?.length) return { sessions: exam.exam.topics, guessed: false };
   const all = [...(course.sessions ?? [])].sort((a, b) => a.number - b.number);
   if (all.length === 0) return { sessions: [], guessed: false };
   const covers = exam.exam?.coversSessions;
@@ -70,6 +72,8 @@ function topicTasks(s: CourseSession): { tasks: string[]; materials: string[] } 
   const tasks = [s.concepts.length ? `Study ${s.topic}: ${s.concepts.join(", ")}` : `Study ${s.topic} from your notes`];
   for (const r of s.readings) tasks.push(`Read ${r} (key pages only)`);
   for (const ps of s.problemSets) tasks.push(`Redo ${ps} by hand, calculator out — then check against the solutions`);
+  if (s.practice && s.problemSets.length === 0 && !/^practice\.?$/i.test(s.practice))
+    tasks.push(`Go over what you did in class: ${s.practice}`);
   tasks.push(`Write down 3 questions about ${s.topic} you still can't answer`);
   const materials = [`Your notes for session ${s.number} (${s.topic})`, ...s.readings];
   for (const ps of s.problemSets) materials.push(`${ps} + solutions`);
@@ -112,8 +116,12 @@ export function buildExamPlan({ exam, course, today, minutesByDate = {} }: ExamP
   const topicsByDate = new Map<string, number[]>();
   if (coreDates.length > 0 && core.length > 0) {
     if (core.length <= coreDates.length) {
-      const revisit = [...core].sort((a, b) => (details.confidence?.[a] ?? 3) - (details.confidence?.[b] ?? 3) || a - b);
-      coreDates.forEach((d, i) => topicsByDate.set(d, [i < core.length ? core[i] : revisit[(i - core.length) % revisit.length]]));
+      const revisit = [...core].sort(
+        (a, b) => (details.confidence?.[a] ?? 3) - (details.confidence?.[b] ?? 3) || a - b,
+      );
+      coreDates.forEach((d, i) =>
+        topicsByDate.set(d, [i < core.length ? core[i] : revisit[(i - core.length) % revisit.length]]),
+      );
     } else {
       const perDay = Math.ceil(core.length / coreDates.length);
       coreDates.forEach((d, i) => topicsByDate.set(d, core.slice(i * perDay, (i + 1) * perDay)));
@@ -232,15 +240,19 @@ export function buildExamPlan({ exam, course, today, minutesByDate = {} }: ExamP
               "20–30 minute skim of your formula sheet only — no new material",
               "In the exam: read the whole paper first, start with the questions worth the most points per minute, keep 10 minutes to check",
             ],
-            materials: [materialsAllowed === "closed book" ? "Pens and your student ID" : `Allowed: ${materialsAllowed}`],
+            materials: [
+              materialsAllowed === "closed book" ? "Pens and your student ID" : `Allowed: ${materialsAllowed}`,
+            ],
           };
       }
     });
 
   const assumptions: string[] = [];
   if (!details.time) assumptions.push("Exam time not confirmed — check it on Blackboard or with your professor.");
-  if (!details.format) assumptions.push("Exam format not confirmed — the plan assumes a mix of problems and theory questions.");
-  if (!details.durationMinutes) assumptions.push(`Exam length not confirmed — the mock exam uses ${DEFAULT_DURATION} minutes.`);
+  if (!details.format)
+    assumptions.push("Exam format not confirmed — the plan assumes a mix of problems and theory questions.");
+  if (!details.durationMinutes)
+    assumptions.push(`Exam length not confirmed — the mock exam uses ${DEFAULT_DURATION} minutes.`);
   if (!details.materials) assumptions.push("Allowed materials not confirmed — the mock exam assumes closed book.");
   if ((course.sessions ?? []).length === 0) {
     assumptions.push("No session schedule found — add it from the syllabus to get a topic for every day.");
@@ -261,11 +273,22 @@ export function examDayFor(plan: ExamPlan, date: string): ExamPlanDay | undefine
 }
 
 /** Planned (or done) study minutes per day for one deliverable, from the schedule. */
-export function minutesByDateFor(blocks: { deliverableId: string; date: string; minutes: number; status: string }[], deliverableId: string): Record<string, number> {
+export function minutesByDateFor(
+  blocks: { deliverableId: string; date: string; minutes: number; status: string }[],
+  deliverableId: string,
+): Record<string, number> {
   const result: Record<string, number> = {};
   for (const b of blocks) {
     if (b.deliverableId !== deliverableId || b.status === "missed") continue;
     result[b.date] = (result[b.date] ?? 0) + b.minutes;
   }
   return result;
+}
+
+/** "I'll organise it myself": your own plan for a day, one task per line. */
+export function myPlanTasks(details: ExamDetails | undefined, date: string): string[] {
+  return (details?.myPlan?.[date] ?? "")
+    .split("\n")
+    .map((t) => t.replace(/^\s*[-*•]\s*/, "").trim())
+    .filter(Boolean);
 }

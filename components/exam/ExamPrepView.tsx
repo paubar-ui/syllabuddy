@@ -2,17 +2,18 @@
 // /exam/[deliverableId] — the exam prep page (V2-6): exam card, focus & confidence per topic,
 // a day-by-day plan that says WHAT to study, a mock exam log, and PDF / calendar export.
 import { format, parseISO } from "date-fns";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Callout, CourseDot, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
 import { buttonPrimary, buttonSecondary, card, input, label, page } from "@/components/ui";
 import { daysBetween, describeDaysAway, todayISO } from "@/lib/dates";
-import { buildExamPlan, examScope, isExam, minutesByDateFor, type ExamPlanDay } from "@/lib/examPlan";
+import { buildExamPlan, examScope, isExam, minutesByDateFor, myPlanTasks, type ExamPlanDay } from "@/lib/examPlan";
 import { buildExamPlanIcs } from "@/lib/ics";
-import { parseSessions } from "@/lib/parseSessions";
+import { extractPdfText } from "@/lib/pdf";
+import { topicsFromText } from "@/lib/studyContent";
+import { readSchedule, topicsForExam, type ScheduleExam } from "@/lib/syllabusBlocks";
 import { useStore } from "@/lib/store";
-import type { Course, Deliverable, ExamDetails, MistakeReason } from "@/lib/types";
+import type { Course, CourseSession, Deliverable, ExamDetails, MistakeReason } from "@/lib/types";
 import { useHydrated } from "@/lib/useHydrated";
 
 const pretty = (iso: string, pattern = "EEE d MMM") => format(parseISO(iso), pattern);
@@ -95,12 +96,22 @@ function ExamPrepContent() {
   }
 
   const daysLeft = daysBetween(today, exam.dueDate);
+  const selfMode = course.studyMode === "self";
+  // In "I'll organise it myself" mode the days carry your own plan instead of ours.
+  const exportDays = selfMode
+    ? plan.days.map((d) => ({
+        ...d,
+        title: d.kind === "exam" ? d.title : "Your plan",
+        goal: "",
+        tasks: d.kind === "exam" ? d.tasks : myPlanTasks(exam.exam, d.date),
+      }))
+    : plan.days;
 
   function exportIcs() {
     const text = buildExamPlanIcs({
       examTitle: exam!.title,
       courseName: course!.name,
-      days: plan!.days,
+      days: exportDays,
       now: new Date(),
     });
     const url = URL.createObjectURL(new Blob([text], { type: "text/calendar;charset=utf-8" }));
@@ -116,7 +127,7 @@ function ExamPrepContent() {
   return (
     <main id="main" data-testid="exam-prep" className={page}>
       <PageHeader
-        back={{ href: "/courses", label: "Courses" }}
+        back={{ href: `/courses/${course.id}`, label: course.name }}
         eyebrow={
           <span className="inline-flex items-center gap-1.5">
             <CourseDot color={course.color} />
@@ -124,7 +135,7 @@ function ExamPrepContent() {
           </span>
         }
         title={`${exam.title} — prep plan`}
-        description="What to study in each session until the exam, built from your syllabus. Adjust the exam details and your confidence below and the plan updates straight away."
+        description="What to study each day until the exam. Paste what you need to study and we organise it for you — or plan it yourself."
         action={
           <div data-print-hide className="flex flex-wrap gap-2">
             <button type="button" onClick={() => window.print()} className={buttonSecondary}>
@@ -139,9 +150,11 @@ function ExamPrepContent() {
 
       <ExamCard exam={exam} course={course} />
 
-      {(course.sessions ?? []).length === 0 && <AddSchedule course={course} today={today} />}
+      <StudyModeSwitch course={course} />
 
-      {plan.scope.length > 0 && <FocusAndConfidence exam={exam} course={course} />}
+      {!selfMode && <StudyContent exam={exam} course={course} today={today} />}
+
+      {!selfMode && plan.scope.length > 0 && <FocusAndConfidence exam={exam} course={course} />}
 
       {/* ---------------- The plan ---------------- */}
       <section aria-labelledby="plan-title" className="mt-8">
@@ -149,8 +162,9 @@ function ExamPrepContent() {
           Day by day
         </h2>
         <p className="text-sm text-muted">
-          Each day lists what to cover. The same tasks appear in that day&apos;s study blocks on Today — click a block
-          to tick them off.
+          {selfMode
+            ? "Write what you'll study each day — one task per line. Your tasks appear in that day's study blocks on Today, ready to tick off."
+            : "Each day lists what to cover. The same tasks appear in that day's study blocks on Today — click a block to tick them off."}
         </p>
         {daysLeft >= 3 && (
           <Callout
@@ -180,18 +194,24 @@ function ExamPrepContent() {
                 </p>
                 <span className="text-sm tabular-nums text-muted">{day.kind === "exam" ? "" : hours(day.minutes)}</span>
               </div>
-              <h3 className="mt-1 font-semibold">{day.title}</h3>
-              <p className="text-sm text-muted">{day.goal}</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                {day.tasks.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
+              {selfMode && day.kind !== "exam" ? (
+                <MyPlanDay exam={exam} date={day.date} dayNumber={day.dayNumber} />
+              ) : (
+                <>
+                  <h3 className="mt-1 font-semibold">{day.title}</h3>
+                  <p className="text-sm text-muted">{day.goal}</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {day.tasks.map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </li>
           ))}
         </ol>
 
-        {plan.assumptions.length > 0 && (
+        {!selfMode && plan.assumptions.length > 0 && (
           <Callout tone="warn" className="mt-4" title="Assumptions — check these">
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
               {plan.assumptions.map((a) => (
@@ -208,8 +228,8 @@ function ExamPrepContent() {
         <HowItWorks title="How this plan is made">
           <p>
             <span className="font-medium">Setup</span> first: gather past exams and notes and rate your confidence.{" "}
-            <span className="font-medium">Core days</span> take one or two topics each, in syllabus order, with their
-            key concepts, readings and problem sets; spare days revisit your least-confident topics.
+            <span className="font-medium">Core days</span> take one or two topics each, in the order you gave them, with
+            their key concepts, readings and problem sets; spare days revisit your least-confident topics.
           </p>
           <p>
             About 3 days before: a <span className="font-medium">mock exam</span> under real conditions, then a{" "}
@@ -572,50 +592,377 @@ function MockLog({ exam, course }: { exam: Deliverable; course: Course }) {
   );
 }
 
-function AddSchedule({ course, today }: { course: Course; today: string }) {
-  const setCourseSessions = useStore((s) => s.setCourseSessions);
+function StudyContent({ exam, course, today }: { exam: Deliverable; course: Course; today: string }) {
+  const updateExam = useStore((s) => s.updateExam);
+  const topics = exam.exam?.topics ?? [];
+  const fromCourse = topics.length === 0 && (course.sessions ?? []).length > 0;
+  const [editing, setEditing] = useState(topics.length === 0 && !fromCourse);
+
+  return (
+    <section aria-labelledby="content-title" data-print-hide data-testid="study-content" className={`${card} mt-6`}>
+      <h2 id="content-title" className="text-lg font-semibold tracking-tight">
+        What do you need to study?
+      </h2>
+      {!editing ? (
+        <>
+          <p className="text-sm text-muted">
+            {fromCourse
+              ? `Using the ${course.sessions!.length} sessions of ${course.name}. Paste your own content to plan exactly what this exam covers.`
+              : `${topics.length} topic${topics.length === 1 ? "" : "s"}, organised into the days below.`}
+          </p>
+          {topics.length > 0 && (
+            <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm">
+              {topics.map((t) => (
+                <li key={t.number}>
+                  <span className="font-medium">{t.topic}</span>
+                  {t.concepts.length > 0 && <span className="text-muted"> — {t.concepts.join(", ")}</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={buttonSecondary} onClick={() => setEditing(true)}>
+              {topics.length ? "Paste different content" : "Paste my own content"}
+            </button>
+            {topics.length > 0 && (
+              <button
+                type="button"
+                className="text-sm font-medium text-muted underline underline-offset-2 hover:text-ink"
+                onClick={() => {
+                  updateExam(exam.id, {
+                    topics: undefined,
+                    focus: undefined,
+                    confidence: undefined,
+                    mockLog: undefined,
+                  });
+                  setEditing(!(course.sessions ?? []).length);
+                }}
+              >
+                Remove it
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <ContentEditor
+          exam={exam}
+          today={today}
+          canCancel={topics.length > 0 || fromCourse}
+          onCancel={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+function StudyModeSwitch({ course }: { course: Course }) {
+  const updateCourse = useStore((s) => s.updateCourse);
+  const mode = course.studyMode ?? "auto";
+  return (
+    <fieldset data-print-hide className={`${card} mt-6`}>
+      <legend className="sr-only">How do you want to prepare?</legend>
+      <p className="text-sm font-semibold">How do you want to prepare?</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {(
+          [
+            ["auto", "Organise my study for me", "Paste what you need to study; we split it into study days."],
+            [
+              "self",
+              "I'll organise it myself",
+              "You write what to study each day; we keep the time and the reminders.",
+            ],
+          ] as const
+        ).map(([value, title, hint]) => (
+          <label
+            key={value}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${
+              mode === value ? "border-accent bg-accent-soft" : "border-line"
+            }`}
+          >
+            <input
+              type="radio"
+              name="study-mode"
+              value={value}
+              checked={mode === value}
+              onChange={() => updateCourse(course.id, { studyMode: value })}
+              className="mt-1 accent-[var(--accent)]"
+            />
+            <span>
+              <span className="font-medium">{title}</span>
+              <span className="block text-muted">{hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted">This applies to every exam of {course.name}. You can switch any time.</p>
+    </fieldset>
+  );
+}
+
+function MyPlanDay({ exam, date, dayNumber }: { exam: Deliverable; date: string; dayNumber: number }) {
+  const updateExam = useStore((s) => s.updateExam);
+  const saved = exam.exam?.myPlan?.[date] ?? "";
+  const [text, setText] = useState(saved);
+  const id = `my-plan-${date}`;
+  return (
+    <div className="mt-1">
+      <label htmlFor={id} className="font-semibold">
+        Your plan for day {dayNumber}
+      </label>
+      <textarea
+        id={id}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          if (text !== saved) updateExam(exam.id, { myPlan: { ...exam.exam?.myPlan, [date]: text.slice(0, 4000) } });
+        }}
+        placeholder={"e.g.\nRedo problem set 2\nSummarise chapter 4"}
+        className={`${input} mt-1 min-h-20 text-sm`}
+      />
+    </div>
+  );
+}
+
+type Draft = CourseSession & { include: boolean; details: string; reading: string };
+
+/**
+ * Paste (or upload) what you need to study → we read it into topics → you tick, fix and save.
+ * A syllabus's session schedule is read block by block; a plain list is one topic per line.
+ */
+function ContentEditor({
+  exam,
+  today,
+  canCancel,
+  onCancel,
+  onSaved,
+}: {
+  exam: Deliverable;
+  today: string;
+  canCancel: boolean;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const updateExam = useStore((s) => s.updateExam);
   const [text, setText] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  return (
-    <section aria-labelledby="schedule-title" data-print-hide className="mt-6">
-      <Callout tone="info" title="Add the session schedule for a topic-by-topic plan">
-        <p>
-          Paste the course schedule from the syllabus (e.g. “Session 3: Externalities — market failure, Pigouvian taxes.
-          PS2”). We&apos;ll read the topics, key concepts, readings and problem sets.
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [found, setFound] = useState<ScheduleExam | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  function read(source: string) {
+    const schedule = readSchedule(source);
+    const fromSchedule = schedule.topics.length >= 2;
+    const topics = fromSchedule ? schedule.topics : topicsFromText(source, today);
+    if (topics.length === 0) {
+      setStatus("We couldn't find any topics. Paste the syllabus's session list, or write one topic per line.");
+      return;
+    }
+    const covered = fromSchedule ? topicsForExam(schedule, exam.type) : null;
+    setDrafts(
+      topics.map((t) => ({
+        ...t,
+        include: covered ? covered.has(t.number) : true,
+        details: t.concepts.join(", "),
+        reading: t.readings.join("; "),
+      })),
+    );
+    const examType = exam.type === "midterm" || exam.type === "final" ? exam.type : "exam";
+    setFound(schedule.exams.find((e) => e.type === examType) ?? schedule.exams.find((e) => e.type === "exam"));
+    setStatus(
+      fromSchedule
+        ? `Found ${topics.length} sessions${schedule.exams.length ? ` and ${schedule.exams.length} exam${schedule.exams.length === 1 ? "" : "s"}` : ""}. Ticked: the ones this ${exam.type === "final" ? "final" : exam.type === "midterm" ? "midterm" : "exam"} probably covers — check them.`
+        : `Found ${topics.length} topic${topics.length === 1 ? "" : "s"}. Check them below.`,
+    );
+  }
+
+  function save() {
+    const chosen = (drafts ?? []).filter((d) => d.include && d.topic.trim());
+    if (chosen.length === 0) {
+      setStatus("Tick at least one topic.");
+      return;
+    }
+    const topics: CourseSession[] = chosen.map(({ number, upTo, practice, problemSets, details, reading, topic }) => ({
+      number,
+      ...(upTo ? { upTo } : {}),
+      ...(practice ? { practice } : {}),
+      problemSets,
+      topic: topic.trim(),
+      concepts: details
+        .split(/[,;]/)
+        .map((c) => c.trim())
+        .filter(Boolean),
+      readings: reading
+        .split(";")
+        .map((r) => r.trim())
+        .filter(Boolean),
+    }));
+    // The syllabus's exam details fill in what the exam card doesn't know yet.
+    const d = exam.exam ?? {};
+    updateExam(exam.id, {
+      topics,
+      focus: undefined,
+      confidence: undefined,
+      mockLog: undefined,
+      ...(found?.details.durationMinutes && !d.durationMinutes
+        ? { durationMinutes: found.details.durationMinutes }
+        : {}),
+      ...(found?.details.materials && !d.materials ? { materials: found.details.materials } : {}),
+      ...(found?.details.format && !d.format ? { format: found.details.format } : {}),
+    });
+    onSaved();
+  }
+
+  const update = (i: number, patch: Partial<Draft>) =>
+    setDrafts((ds) => ds && ds.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+
+  if (drafts) {
+    const n = drafts.filter((d) => d.include).length;
+    return (
+      <div data-testid="content-review">
+        <p role="status" className="text-sm text-muted">
+          {status}
         </p>
-        <label htmlFor="schedule-text" className="sr-only">
-          Session schedule
-        </label>
-        <textarea
-          id="schedule-text"
-          className={`${input} mt-2 min-h-28 font-mono text-sm`}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className={buttonPrimary}
-            onClick={() => {
-              const { sessions } = parseSessions(text, { today });
-              if (sessions.length === 0) {
-                setStatus("No sessions found — make sure each line starts with “Session 1”, “Week 1”, “Lecture 1”…");
-                return;
-              }
-              setCourseSessions(course.id, sessions);
-              setStatus(null);
-            }}
-          >
-            Read schedule
+        {found && (
+          <p className="mt-1 text-sm">
+            <span className="font-medium">Exam details found: </span>
+            {[
+              found.details.durationMinutes && `${found.details.durationMinutes} min`,
+              found.details.materials,
+              found.details.format,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "none"}
+          </p>
+        )}
+        <ol className="mt-3 space-y-2">
+          {drafts.map((d, i) => (
+            <li
+              key={`${d.number}-${i}`}
+              className={`rounded-lg border p-3 ${d.include ? "border-line" : "border-dashed border-line bg-surface-2"}`}
+            >
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={d.include}
+                  onChange={(e) => update(i, { include: e.target.checked })}
+                  aria-label={`Include ${d.topic || `topic ${i + 1}`}`}
+                  className="mt-2 h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
+                />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      Ses. {d.number}
+                      {d.upTo ? `–${d.upTo}` : ""}
+                    </span>
+                    <label htmlFor={`ct-${i}`} className="sr-only">
+                      Topic {i + 1}
+                    </label>
+                    <input
+                      id={`ct-${i}`}
+                      className={`${input} py-1 text-sm font-medium`}
+                      value={d.topic}
+                      onChange={(e) => update(i, { topic: e.target.value })}
+                    />
+                  </div>
+                  <label htmlFor={`cd-${i}`} className="sr-only">
+                    Key concepts for {d.topic}
+                  </label>
+                  <textarea
+                    id={`cd-${i}`}
+                    rows={d.details.length > 120 ? 3 : 1}
+                    className={`${input} py-1 text-sm`}
+                    placeholder="Key concepts, separated by commas"
+                    value={d.details}
+                    onChange={(e) => update(i, { details: e.target.value })}
+                  />
+                  <label htmlFor={`cr-${i}`} className="sr-only">
+                    Readings for {d.topic}
+                  </label>
+                  <input
+                    id={`cr-${i}`}
+                    className={`${input} py-1 text-sm`}
+                    placeholder="Readings"
+                    value={d.reading}
+                    onChange={(e) => update(i, { reading: e.target.value })}
+                  />
+                  {d.practice && <p className="text-xs text-muted">In class: {d.practice}</p>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" className={buttonPrimary} onClick={save}>
+            Organise {n} topic{n === 1 ? "" : "s"} into study days
           </button>
-          <span role="status" className="text-sm">
-            {status}
-          </span>
-          <Link href="/courses" className="text-sm font-medium underline underline-offset-2">
-            Back to courses
-          </Link>
+          <button type="button" className={buttonSecondary} onClick={() => setDrafts(null)}>
+            Back to the text
+          </button>
         </div>
-      </Callout>
-    </section>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p className="text-sm text-muted">
+        Paste your syllabus&apos;s session list (or upload the PDF), or simply write the topics this exam covers — one
+        per line. We&apos;ll read it into topics you can check and fix before we organise them into study days.
+      </p>
+      <label htmlFor="content-text" className="sr-only">
+        What you need to study
+      </label>
+      <textarea
+        id="content-text"
+        className={`${input} mt-2 min-h-36 text-sm`}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={
+          "e.g.\nSESSION 1 — Introduction … Reading: Chapter 1\nor simply:\nProbability: Bayes, independence\nHypothesis testing"
+        }
+      />
+      <div className="mt-2">
+        <label htmlFor="content-pdf" className={label}>
+          Or upload the syllabus PDF
+        </label>
+        <input
+          id="content-pdf"
+          type="file"
+          accept="application/pdf"
+          disabled={busy}
+          className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface-2 file:px-3 file:py-2 file:text-sm file:font-medium"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setStatus("Reading the PDF…");
+            try {
+              const pdfText = await extractPdfText(file);
+              setText(pdfText);
+              read(pdfText);
+            } catch {
+              setStatus("We couldn't read that PDF. Copy its text and paste it above instead.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" className={buttonPrimary} disabled={busy || !text.trim()} onClick={() => read(text)}>
+          Read it
+        </button>
+        {canCancel && (
+          <button type="button" className={buttonSecondary} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+        <span role="status" className="text-sm text-muted">
+          {status}
+        </span>
+      </div>
+    </>
   );
 }

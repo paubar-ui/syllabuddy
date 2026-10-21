@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Callout, HowItWorks } from "@/components/kit";
 import { buttonLink, buttonPrimary, buttonSecondary, card, input, label } from "@/components/ui";
-import { classCount } from "@/lib/blackboard";
+import { CALENDAR_VERSION, classCount } from "@/lib/blackboard";
 import { resync, syncFromFile, syncFromUrl, type SyncResult } from "@/lib/calendarSync";
 import { useStore } from "@/lib/store";
 
@@ -39,6 +39,7 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
   }
 
   const connected = Boolean(calendar);
+  const outdatedFile = Boolean(calendar && !calendar.url && calendar.version !== CALENDAR_VERSION);
   const showForm = !connected || replacing;
 
   // On Plan, a connected calendar steps aside: a short confirmation right after connecting,
@@ -57,6 +58,22 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
           }
         >
           {status.text.replace(" below.", " in Settings.")} You can re-sync or disconnect it there too.
+        </Callout>
+      );
+    }
+    if (calendar && outdatedFile) {
+      return (
+        <Callout
+          tone="warn"
+          title="Upload your Blackboard calendar again"
+          action={
+            <Link href="/settings#calendar-title" className={buttonSecondary}>
+              Go to Settings
+            </Link>
+          }
+        >
+          We now read Blackboard calendars better (one row per subject, with its session numbers). Upload your .ics file
+          again in Settings to update it.
         </Callout>
       );
     }
@@ -84,8 +101,8 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
         Blackboard calendar
       </h2>
       <p className="text-sm text-muted">
-        Connect your Blackboard calendar so Syllabuddy knows your class times. No study blocks are planned during class,
-        and a syllabus deadline like “Session 15” gets the real date of that class. No Blackboard password needed.
+        Connect your Blackboard calendar so Syllabuddy knows your class times. Your classes appear on Plan and Today, no study blocks
+        are planned during class, and Blackboard&apos;s deadlines can be added to your plan with one click. No Blackboard password needed.
       </p>
 
       {connected && calendar && (
@@ -98,6 +115,12 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
               <span className="text-muted"> · last read {format(new Date(calendar.lastSync), "d MMM, HH:mm")}</span>
             )}
           </p>
+          {outdatedFile && (
+            <Callout tone="warn" className="mt-3" title="Upload your calendar file again">
+              We now read Blackboard calendars better — one row per subject, with its session numbers. Choose “Use
+              another link or file” below and upload the .ics file again.
+            </Callout>
+          )}
           {calendar.error && (
             <Callout tone="warn" className="mt-3" title="Couldn't refresh your calendar">
               {calendar.error}
@@ -272,8 +295,8 @@ export function CalendarCard({ where = "settings" }: { where?: "plan" | "setting
       <div className="mt-2">
         <HowItWorks title="How the calendar is used">
           <p>
-            Classes are numbered per course in date order, so the 15th class is “Session 15”. Deadlines in the syllabus
-            given as a session number get that class&apos;s date — you can still change it.
+            Each subject gets one row, with its classes numbered as in Blackboard (“Ses. 10”). Cancelled classes are
+            skipped; asynchronous ones keep their number but don&apos;t take study time.
           </p>
           <p>
             Study blocks start at 18:00. If a class runs into the evening, study starts 15 minutes after it ends, and

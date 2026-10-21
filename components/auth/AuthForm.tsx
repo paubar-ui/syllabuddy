@@ -48,7 +48,7 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
       </h1>
       <p className="mt-1 text-center text-muted">
         {isSignup
-          ? "Turn your syllabi into a daily study plan — saved to your account, on any device."
+          ? "Turn your deadlines into a daily study plan — saved to your account, on any device."
           : "Log in to see today's plan."}
       </p>
 

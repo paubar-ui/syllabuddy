@@ -4,7 +4,7 @@ import { Tick } from "./Tick";
 const STEPS = [
   {
     title: "Add your deadlines",
-    text: "Type them in, or paste or upload a syllabus PDF and we find every date and grade weight for you.",
+    text: "Type them in with their date and weight, or add them from your Blackboard calendar with one click.",
     tone: "border-accent-line bg-accent-soft text-accent",
   },
   {
@@ -29,7 +29,7 @@ export function Landing() {
           For university students juggling 5–7 courses
         </p>
         <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-          Turn your syllabi into a daily study plan — and never cram again.
+          Turn your deadlines into a daily study plan — and never cram again.
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-muted">
           Add your deadlines and Syllabuddy tells you exactly what to study each day, so you start on time and finish every

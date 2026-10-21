@@ -56,7 +56,11 @@ describe("examScope", () => {
 
 describe("buildExamPlan — 10 days out", () => {
   const plan = buildExamPlan({
-    exam: midterm(10, { coversSessions: [1, 2, 3, 4], durationMinutes: 75, materials: "closed book, calculator allowed" }),
+    exam: midterm(10, {
+      coversSessions: [1, 2, 3, 4],
+      durationMinutes: 75,
+      materials: "closed book, calculator allowed",
+    }),
     course,
     today: TODAY,
     minutesByDate: { [day(0)]: 60, [day(2)]: 90 },
@@ -64,7 +68,17 @@ describe("buildExamPlan — 10 days out", () => {
 
   it("follows setup → core topics → mock → repair → review → exam", () => {
     expect(plan.days.map((d) => d.kind)).toEqual([
-      "setup", "core", "core", "core", "core", "core", "core", "mock", "repair", "review", "exam",
+      "setup",
+      "core",
+      "core",
+      "core",
+      "core",
+      "core",
+      "core",
+      "mock",
+      "repair",
+      "review",
+      "exam",
     ]);
     expect(plan.days[0]).toMatchObject({ date: TODAY, dayNumber: 1, minutes: 60 });
     expect(plan.days.at(-1)).toMatchObject({ date: day(10), dayNumber: 11, kind: "exam" });
@@ -90,7 +104,9 @@ describe("buildExamPlan — 10 days out", () => {
   it("sets up a mock exam under real conditions ~3 days before", () => {
     const mock = plan.days.find((d) => d.kind === "mock")!;
     expect(mock.date).toBe(day(7));
-    expect(mock.tasks[0]).toBe("Do a full mock exam: 75-minute timer, closed book, calculator allowed only — no phone, no notes you won't have");
+    expect(mock.tasks[0]).toBe(
+      "Do a full mock exam: 75-minute timer, closed book, calculator allowed only — no phone, no notes you won't have",
+    );
   });
 
   it("suggests emailing the professor 3 days before and lists what was guessed", () => {
@@ -109,7 +125,11 @@ describe("buildExamPlan — 10 days out", () => {
 
 describe("focus, confidence and the mock log", () => {
   it("light sessions move to the review day", () => {
-    const plan = buildExamPlan({ exam: midterm(10, { coversSessions: [1, 2, 3, 4], focus: { 4: "light" } }), course, today: TODAY });
+    const plan = buildExamPlan({
+      exam: midterm(10, { coversSessions: [1, 2, 3, 4], focus: { 4: "light" } }),
+      course,
+      today: TODAY,
+    });
     expect(plan.core).toEqual([1, 2, 3]);
     expect(plan.days.find((d) => d.kind === "review")!.tasks[0]).toBe("Light review of Public goods");
   });
@@ -138,7 +158,9 @@ describe("short on time and missing data", () => {
     const plan = buildExamPlan({ exam: midterm(2, { coversSessions: [1, 2] }), course, today: TODAY });
     expect(plan.days.map((d) => d.kind)).toEqual(["setup", "review", "exam"]);
     expect(plan.days[0].tasks.join(" ")).toContain("Welfare economics");
-    expect(plan.assumptions).toContain("Fewer than 4 days left — the plan skips the separate mock exam and repair days.");
+    expect(plan.assumptions).toContain(
+      "Fewer than 4 days left — the plan skips the separate mock exam and repair days.",
+    );
   });
 
   it("on exam day itself: just the exam day", () => {
@@ -149,11 +171,24 @@ describe("short on time and missing data", () => {
   it("without a session schedule it still makes a generic plan", () => {
     const plan = buildExamPlan({ exam: midterm(8), course: { ...course, sessions: [] }, today: TODAY });
     expect(plan.days.filter((d) => d.kind === "core")[0].tasks[0]).toMatch(/Work through your notes/);
-    expect(plan.assumptions).toContain("No session schedule found — add it from the syllabus to get a topic for every day.");
+    expect(plan.assumptions).toContain(
+      "No session schedule found — add it from the syllabus to get a topic for every day.",
+    );
   });
 
   it("knows which deliverables are exams", () => {
     expect(isExam({ type: "final" })).toBe(true);
     expect(isExam({ type: "essay" })).toBe(false);
+  });
+});
+
+describe("pasted study content", () => {
+  it("covers exactly the topics you pasted for this exam", () => {
+    const pasted = [session(1, "Bayes"), session(2, "Regression")];
+    const exam = midterm(10, { topics: pasted });
+    expect(examScope(exam, course)).toEqual({ sessions: pasted, guessed: false });
+    const plan = buildExamPlan({ exam, course, today: TODAY });
+    expect(plan.days.some((d) => d.title.includes("Bayes"))).toBe(true);
+    expect(plan.days.some((d) => d.title.includes("Welfare"))).toBe(false);
   });
 });

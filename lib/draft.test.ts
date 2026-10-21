@@ -1,14 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyCalendarToDrafts,
-  draftFromExtraction,
-  draftsToStore,
-  emptyCourse,
-  validateDrafts,
-  weightTotal,
-  weightsLookOff,
-  type DraftCourse,
-} from "./draft";
+import { draftsToStore, emptyCourse, validateDrafts, weightTotal, weightsLookOff, type DraftCourse } from "./draft";
 
 let n = 0;
 const makeId = () => `id${++n}`;
@@ -23,35 +14,13 @@ const course = (overrides: Partial<DraftCourse> = {}): DraftCourse => ({
   ...overrides,
 });
 
-describe("draftFromExtraction", () => {
-  it("turns found deliverables into editable rows", () => {
-    const d = draftFromExtraction(
-      {
-        courseName: "Law",
-        gradeScale: 100,
-        attendancePolicy: "80% attendance",
-        deliverables: [{ title: "Essay", type: "essay", dueDate: null, weight: 25 }],
-      },
-      1,
-      makeId,
-    );
-    expect(d.name).toBe("Law");
-    expect(d.gradeScale).toBe(100);
-    expect(d.items[0]).toMatchObject({ title: "Essay", type: "essay", dueDate: "", weight: "25" });
-  });
-
-  it("starts with one empty row when nothing was found, and a sane grade scale", () => {
-    const d = draftFromExtraction({ courseName: null, gradeScale: 7, attendancePolicy: null, deliverables: [] }, 0, makeId);
-    expect(d.items).toHaveLength(1);
-    expect(d.gradeScale).toBe(10);
-  });
-});
-
 describe("weights", () => {
   it("adds up weights and flags totals far from 100%", () => {
     expect(weightTotal(course())).toBe(100);
     expect(weightsLookOff(course())).toBe(false);
-    const off = course({ items: [{ id: "a", title: "Midterm", type: "midterm", dueDate: "2026-11-02", weight: "30,5" }] });
+    const off = course({
+      items: [{ id: "a", title: "Midterm", type: "midterm", dueDate: "2026-11-02", weight: "30,5" }],
+    });
     expect(weightTotal(off)).toBe(30.5);
     expect(weightsLookOff(off)).toBe(true);
   });
@@ -90,31 +59,10 @@ describe("draftsToStore", () => {
   });
 });
 
-describe("applyCalendarToDrafts", () => {
-  const cc = {
-    key: "stats",
-    name: "Statistics",
-    sessions: [1, 2, 3].map((n) => ({ number: n, date: `2026-11-0${n}`, start: "10:00", end: "11:30" })),
-  };
-  const draft = {
-    ...emptyCourse(0, () => "c1"),
-    calendarKey: "stats",
-    items: [
-      { id: "a", title: "Midterm", type: "midterm" as const, dueDate: "", weight: "30", sessionRef: 2 },
-      { id: "b", title: "Quiz", type: "quiz" as const, dueDate: "2026-12-01", weight: "10", sessionRef: 3 },
-      { id: "c", title: "Final", type: "final" as const, dueDate: "", weight: "60", sessionRef: 9 },
-    ],
-  };
-
-  it("fills session dates, keeps typed dates, leaves unknown sessions empty", () => {
-    const [d] = applyCalendarToDrafts([draft], [cc]);
-    expect(d.items.map((i) => i.dueDate)).toEqual(["2026-11-02", "2026-12-01", ""]);
-    expect(d.items[0].dateFromCalendar).toBe(true);
-  });
-
-  it("clears calendar dates when the course is unmatched", () => {
-    const [filled] = applyCalendarToDrafts([draft], [cc]);
-    const [d] = applyCalendarToDrafts([{ ...filled, calendarKey: undefined }], [cc]);
-    expect(d.items[0].dueDate).toBe("");
+describe("emptyCourse", () => {
+  it("starts with no deadlines, and a course without deadlines is fine", () => {
+    const c = { ...emptyCourse(0, makeId), name: "Stats" };
+    expect(c.items).toEqual([]);
+    expect(validateDrafts([c])).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 # Syllabuddy ⏰
 
-**Upload your syllabi, tell us how hard each class is for you, and get a daily study plan that keeps you on track — with streaks, a mascot coach and friends to compete with.**
+**Add your deadlines, tell us how hard each class is for you, and get a daily study plan that keeps you on track — with streaks, a mascot coach and friends to compete with.**
 
 🔗 **Live app: [syllabuddy-five.vercel.app](https://syllabuddy-five.vercel.app)** — sign up free with email and password, then add your first deadline (or click **“Load a sample semester”** to explore with four sample courses).
 
@@ -12,14 +12,16 @@
 
 University students juggle 5–7 syllabi, each a PDF with deadlines and grade weights buried somewhere inside. Nobody tells you *how much* to study *each day*, so it's easy to start too late and then burn out in the "hell weeks" where every midterm and project lands at once.
 
-Syllabuddy turns those PDFs into a realistic daily plan: it spreads the work out, adapts when life gets in the way, and keeps you motivated without guilt-tripping you.
+Syllabuddy turns those deadlines into a realistic daily plan: it spreads the work out, adapts when life gets in the way, and keeps you motivated without guilt-tripping you.
 
 ## Features
 
 **Plan**
 - ➕ **Add a deadline in seconds** — type what's due (e.g. "Finance midterm") and press *Add deadline*; the type is recognised from the title and the date, course and weight get sensible defaults you can change. It's saved to your account and planned immediately.
-- 📄 **Syllabus import** — paste the text or upload a PDF (read in your browser). A built-in reader finds deliverables, due dates, grade weights, the grading scale and attendance rules, in **English and Spanish** (`15/11/2026`, `Nov 15`, `15 de noviembre`, `Week 7`, `Midterm – 30%`…). You always review and fix everything before saving.
-- 🎚️ **Effort per course** — tell it how hard each class is *for you* (1–5) and an optional target grade.
+- 📚 **Your courses** — add each course with its deadlines and grade weights, how hard it is *for you* (1–5) and an optional target grade.
+- 🏫 **Blackboard calendar** — connect your Blackboard calendar with its share link (or an `.ics` file). Each subject's classes are read with their session numbers ("Ses. 10"), shown on Plan and Today, and kept free of study blocks; Blackboard's deadlines can be added to a course with one click.
+- 📝 **Exam prep plans** — paste what you need to study for an exam and it's organised into study days (setup, core topics, mock exam, repair day, light review), or choose *I'll organise it myself* and write your own plan per day. Export it as a PDF or to your calendar.
+- 🌅 **Daily briefing** — the first screen: greeting, today's plan with times, what's coming up in the next 7 days and heads-ups (heavy week, missed blocks).
 - 🗓️ **Daily schedule** — study blocks of 25–90 minutes, fitted around your free time per weekday and a daily cap.
 - 🔁 **Automatic replanning** — missed blocks are moved forward from today, with a gentle note instead of a guilt trip.
 - 📆 **Calendar export** — download an `.ics` file for Google Calendar, Apple Calendar or Outlook.
@@ -72,14 +74,14 @@ Everything due in the next 24–72 hours is ranked by **grade points per hour** 
 - **Grade calculator** — [`lib/grades.ts`](lib/grades.ts): the average needed on the remaining components to reach your target.
 - **Points & streaks** — [`lib/gamification.ts`](lib/gamification.ts): a block is worth `round(minutes/5) × (1 + weight/50)`; +10 per full focus session, +50 per finished deliverable; one streak freeze per 7-day streak (max 2).
 - **Burnout guard** — [`lib/burnout.ts`](lib/burnout.ts).
-- **Syllabus reader** — [`lib/parseSyllabus.ts`](lib/parseSyllabus.ts).
+- **Blackboard calendar** — [`lib/calendarIcs.ts`](lib/calendarIcs.ts) reads the `.ics` file (time zones, weekly repeats, cancelled classes); [`lib/blackboard.ts`](lib/blackboard.ts) groups classes by subject, numbers the sessions and turns evening classes into busy time.
+- **Exam prep** — [`lib/examPlan.ts`](lib/examPlan.ts): pasted topics → setup, core days, mock exam and repair day (aimed at your weakest topics), light review.
 - **Calendar export** — [`lib/ics.ts`](lib/ics.ts): RFC 5545 with CRLF line endings, UIDs, timestamps, escaping and line folding.
 
 ```mermaid
 flowchart LR
-  A[Syllabus text or PDF] --> B[Reader<br/>offline, or AI if configured]
-  B --> C[You review & fix]
-  C --> D[Hour estimates<br/>effort × weight × pace]
+  A[Your courses & deadlines] --> D[Hour estimates<br/>effort × weight × pace]
+  B[Blackboard calendar] --> E
   D --> E[Scheduler]
   F[Your free time & days off] --> E
   E --> G[Today · Plan · Calendar]
@@ -97,7 +99,6 @@ flowchart LR
 | State & data | Zustand in the browser, saved to your account in Supabase (Postgres with Row Level Security) |
 | Validation | Zod |
 | Dates | date-fns |
-| PDF | pdf.js (`pdfjs-dist`), in the browser |
 | Accounts | Supabase Auth — email + password |
 | Optional AI | Anthropic Claude via `@anthropic-ai/sdk` (Claude Haiku 5.5 by default) |
 | Tests | Vitest (unit) · Playwright + axe-core (end-to-end, the grading bot's checks & accessibility) · PGlite (database rules) |
@@ -135,7 +136,7 @@ Copy [`.env.example`](.env.example) to `.env.local` (git-ignored); on Vercel, ad
 
 | Name | Used for |
 |---|---|
-| `ANTHROPIC_API_KEY` | Turns on AI syllabus reading. Without it, the built-in offline reader is used. (Secret — server only.) |
+| `ANTHROPIC_API_KEY` | Optional: richer explanations of an exam prep day. Without it, everything works offline. (Secret — server only.) |
 | `ANTHROPIC_MODEL` | Which Claude model to use (default `claude-haiku-5-5`). |
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL (accounts and data). |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Your Supabase publishable (anon) key. Public by design — the database rules protect the data. |
@@ -166,7 +167,8 @@ Syllabuddy was built for a university assignment with **[Claude Code](https://cl
 - **Phase by phase.** Claude Code wrote the code and tests for each phase, ran lint, tests and the production build, and clicked through the app in a browser before each commit. I tried the app in the browser, made the product decisions, set up Supabase, GitHub and Vercel, and asked for changes when something felt off.
 - **Decisions along the way.** With no AI key available, the offline syllabus reader became the main path instead of a fallback. When the assignment's grading contract arrived (email + password accounts, `/signup`, `/login`, `/app`, all user data in Supabase), the app was reworked to follow it: the plan moved from the browser into a private Supabase table, and "add a deadline" became the one-action main feature. Study buddies were designed so only weekly totals are shared. Personal email addresses were kept out of the public git history.
 - **Tests caught real problems**, for example: "Problem *set 1*" being read as *September 1* (Spanish "set" = *setiembre*), a demo semester with more work than free time, faded text that failed contrast checks, and Next.js keeping hidden copies of earlier pages in the DOM — which duplicated test IDs and would have confused the grading bot.
-- **AI inside the app is optional.** If `ANTHROPIC_API_KEY` is set, `/api/extract` asks Claude to read a syllabus and return strict JSON, which is validated with Zod and always shown for review. Without a key the app never calls an AI service.
+- **Reading syllabi was tried and dropped.** Syllabi list the same assignment in several places (grading table, schedule, descriptions), so automatic import kept producing repeated or wrong deadlines. It was removed: you add deadlines yourself or from Blackboard, and for exams you paste exactly what you need to study.
+- **AI inside the app is optional.** If `ANTHROPIC_API_KEY` is set, `/api/exam-day` can explain an exam prep day in more detail. Without a key the app never calls an AI service.
 
 ---
 

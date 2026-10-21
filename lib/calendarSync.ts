@@ -1,7 +1,8 @@
 "use client";
 // Reading the Blackboard calendar from the browser (V2-3): a share link goes through our
 // /api/calendar route (with your login token); an uploaded .ics file is read right here.
-import { classCount, groupClassSessions, normalizeCalendarUrl } from "./blackboard";
+import { CALENDAR_VERSION, classCount, extractDeadlines, groupClassSessions, normalizeCalendarUrl } from "./blackboard";
+import { todayISO } from "./dates";
 import { parseIcs } from "./calendarIcs";
 import { useStore } from "./store";
 import { getSupabase } from "./supabase";
@@ -11,14 +12,21 @@ export type SyncResult = { ok: true; courses: number; sessions: number } | { ok:
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 function save(text: string, source: { url?: string; fileName?: string }): SyncResult {
-  const courses = groupClassSessions(parseIcs(text));
+  const events = parseIcs(text);
+  const courses = groupClassSessions(events);
   if (courses.length === 0) {
     return {
       ok: false,
       message: "We read the calendar but found no class sessions in it (only deadlines or all-day events).",
     };
   }
-  useStore.getState().setCalendar({ ...source, lastSync: new Date().toISOString(), courses });
+  useStore.getState().setCalendar({
+    ...source,
+    lastSync: new Date().toISOString(),
+    courses,
+    deadlines: extractDeadlines(events, todayISO()),
+    version: CALENDAR_VERSION,
+  });
   return { ok: true, courses: courses.length, sessions: courses.reduce((n, c) => n + classCount(c), 0) };
 }
 

@@ -24,7 +24,7 @@ const ICONS = {
 const ITEMS = [
   { href: "/app", label: "Today", icon: ICONS.today, also: ["/focus", "/panic"] },
   { href: "/plan", label: "Plan", icon: ICONS.plan, also: [] },
-  { href: "/courses", label: "Courses", icon: ICONS.courses, also: ["/onboarding", "/exam"] },
+  { href: "/courses", label: "Courses", icon: ICONS.courses, also: ["/exam"] },
   { href: "/buddies", label: "Study buddies", short: "Buddies", icon: ICONS.buddies, also: [] },
   { href: "/settings", label: "Settings", icon: ICONS.settings, also: [] },
 ];

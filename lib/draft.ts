@@ -1,10 +1,15 @@
 // Editable "draft" courses used during onboarding, before they are saved to the store.
 // Numbers are kept as strings while the user types; they are converted when saving.
-import type { ExtractedSyllabus } from "./extraction";
 import { newId } from "./id";
-import type { ParsedSchedule } from "./parseSessions";
-import { sessionDate } from "./blackboard";
-import type { CalendarCourse, Course, CourseSession, Deliverable, DeliverableType, Effort, ExamDetails } from "./types";
+import type {
+  Course,
+  CourseSession,
+  ExamKind,
+  Deliverable,
+  DeliverableType,
+  Effort,
+  ExamDetails,
+} from "./types";
 
 export const COURSE_COLORS = ["#1d4ed8", "#be185d", "#047857", "#b45309", "#7c3aed", "#0e7490", "#b91c1c"];
 
@@ -30,6 +35,8 @@ export interface DraftCourse {
   items: DraftItem[];
   sessions: CourseSession[];
   calendarKey?: string; // the matching course in the Blackboard calendar
+  examInfo?: Partial<Record<ExamKind, ExamDetails>>; // exam details read from the syllabus
+  studyMode?: "auto" | "self";
 }
 
 export function emptyItem(makeId = newId): DraftItem {
@@ -45,44 +52,18 @@ export function emptyCourse(index: number, makeId = newId): DraftCourse {
     attendancePolicy: null,
     effort: 3,
     targetGrade: "",
-    items: [emptyItem(makeId)],
+    items: [],
     sessions: [],
   };
 }
 
-export function draftFromExtraction(
-  x: ExtractedSyllabus,
-  index: number,
-  makeId = newId,
-  schedule?: ParsedSchedule,
-): DraftCourse {
-  const examFor = (type: DeliverableType): ExamDetails | undefined => {
-    if (!schedule || !["exam", "midterm", "final"].includes(type)) return undefined;
-    const found = schedule.exams.find((e) => e.type === type) ?? schedule.exams.find((e) => e.type === "exam");
-    if (!found) return undefined;
-    const { type: _type, ...details } = found;
-    void _type;
-    return details;
-  };
-  const gradeScale = x.gradeScale && [10, 20, 100].includes(x.gradeScale) ? x.gradeScale : 10;
-  return {
-    ...emptyCourse(index, makeId),
-    name: x.courseName ?? "",
-    gradeScale,
-    attendancePolicy: x.attendancePolicy,
-    items: x.deliverables.length
-      ? x.deliverables.map((d) => ({
-          id: makeId(),
-          title: d.title,
-          type: d.type,
-          dueDate: d.dueDate ?? "",
-          weight: d.weight === null ? "" : String(d.weight),
-          ...(d.sessionRef ? { sessionRef: d.sessionRef } : {}),
-          ...(examFor(d.type) ? { exam: examFor(d.type) } : {}),
-        }))
-      : [emptyItem(makeId)],
-    sessions: schedule?.sessions ?? [],
-  };
+/** The syllabus's details for an exam of this type (a generic "exam" fits any exam). */
+export function examInfoFor(
+  info: Partial<Record<ExamKind, ExamDetails>> | undefined,
+  type: DeliverableType,
+): ExamDetails | undefined {
+  if (!info || !["exam", "midterm", "final"].includes(type)) return undefined;
+  return info[type as ExamKind] ?? info.exam;
 }
 
 const toNumber = (text: string): number | null => {
@@ -114,9 +95,6 @@ export function validateDrafts(courses: DraftCourse[]): DraftProblem[] {
   courses.forEach((c, ci) => {
     const courseLabel = c.name.trim() || `Course ${ci + 1}`;
     if (!c.name.trim()) problems.push({ courseId: c.id, message: `${courseLabel}: give the course a name.` });
-    if (c.items.length === 0) {
-      problems.push({ courseId: c.id, message: `${courseLabel}: add at least one deliverable.` });
-    }
     c.items.forEach((item, ii) => {
       const label = `${courseLabel} – ${item.title.trim() || `item ${ii + 1}`}`;
       if (!item.title.trim()) problems.push({ courseId: c.id, itemId: item.id, message: `${label}: add a title.` });
@@ -150,6 +128,8 @@ export function draftsToStore(drafts: DraftCourse[]): {
       ...(target !== null ? { targetGrade: target } : {}),
       ...(d.attendancePolicy ? { attendancePolicy: d.attendancePolicy } : {}),
       ...(d.sessions.length ? { sessions: d.sessions } : {}),
+      ...(d.examInfo ? { examInfo: d.examInfo } : {}),
+      ...(d.studyMode ? { studyMode: d.studyMode } : {}),
     };
   });
   const deliverables = drafts.flatMap((d) =>
@@ -162,28 +142,10 @@ export function draftsToStore(drafts: DraftCourse[]): {
       weight: toNumber(i.weight) ?? 0,
       loggedMinutes: 0,
       done: false,
-      ...(i.exam ? { exam: i.exam } : {}),
+      ...((i.exam ?? examInfoFor(d.examInfo, i.type)) ? { exam: i.exam ?? examInfoFor(d.examInfo, i.type) } : {}),
       ...(i.sessionRef ? { sessionRef: i.sessionRef, dateFromCalendar: Boolean(i.dateFromCalendar) } : {}),
     })),
   );
   return { courses, deliverables };
 }
 
-/**
- * Fills "Session N" dates from the matched Blackboard course (V2-3). Dates you typed yourself
- * are kept; dates that came from the calendar follow a change of matched course.
- */
-export function applyCalendarToDrafts(drafts: DraftCourse[], calendarCourses: CalendarCourse[]): DraftCourse[] {
-  return drafts.map((d) => {
-    const cc = calendarCourses.find((c) => c.key === d.calendarKey);
-    let changed = false;
-    const items = d.items.map((i) => {
-      if (!i.sessionRef || (i.dueDate && !i.dateFromCalendar)) return i;
-      const date = sessionDate(cc, i.sessionRef);
-      if (date === (i.dateFromCalendar ? i.dueDate : undefined)) return i;
-      changed = true;
-      return date ? { ...i, dueDate: date, dateFromCalendar: true } : { ...i, dueDate: "", dateFromCalendar: false };
-    });
-    return changed ? { ...d, items } : d;
-  });
-}

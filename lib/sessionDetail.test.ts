@@ -34,6 +34,20 @@ const deliverable = (type: Deliverable["type"], dueIn: number): Deliverable => (
 const block = (date: string): StudyBlock => ({ id: "b1", deliverableId: "d1", date, minutes: 60, status: "planned" });
 
 describe("blockDetail", () => {
+  it("shows your own plan when you organise the exam yourself", () => {
+    const d = {
+      ...deliverable("midterm", 10),
+      exam: { coversSessions: [1, 2, 3], myPlan: { [day(1)]: "- Redo PS2\nSummarise ch. 4" } },
+    };
+    const b = block(day(1));
+    const self = { ...course, studyMode: "self" as const };
+    const detail = blockDetail({ block: b, deliverable: d, course: self, blocks: [b], today: TODAY });
+    expect(detail.heading).toBe("Day 2 · Your plan");
+    expect(detail.tasks).toEqual(["Redo PS2", "Summarise ch. 4"]);
+    const empty = blockDetail({ block: block(day(2)), deliverable: d, course: self, blocks: [b], today: TODAY });
+    expect(empty.goal).toMatch(/haven't written a plan/);
+  });
+
   it("uses the exam prep plan day for exam blocks", () => {
     const d = deliverable("midterm", 10);
     const b = block(day(1));

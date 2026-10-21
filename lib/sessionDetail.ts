@@ -1,7 +1,7 @@
 // What to do in one study block (V2-6): goal, checklist, materials and a tip. Exam blocks use
 // that day of the exam prep plan; other blocks get a sensible checklist for their type.
 import { daysBetween, describeDaysAway } from "./dates";
-import { buildExamPlan, examDayFor, isExam, minutesByDateFor, type ExamPlanDay } from "./examPlan";
+import { buildExamPlan, examDayFor, isExam, minutesByDateFor, myPlanTasks, type ExamPlanDay } from "./examPlan";
 import type { Course, Deliverable, DeliverableType, StudyBlock } from "./types";
 
 export interface BlockDetail {
@@ -111,6 +111,20 @@ export function blockDetail({
       minutesByDate: minutesByDateFor(blocks, deliverable.id),
     });
     const day = examDayFor(plan, block.date);
+    if (day && day.kind !== "exam" && course.studyMode === "self") {
+      const mine = myPlanTasks(deliverable.exam, block.date);
+      return {
+        heading: `Day ${day.dayNumber} · Your plan`,
+        dayInfo: `Day ${day.dayNumber} of ${plan.days.length} · exam ${describeDaysAway(daysBetween(today, deliverable.dueDate))}`,
+        goal: mine.length ? "What you planned for today." : "You haven't written a plan for today yet.",
+        tasks: mine.length
+          ? mine
+          : ["Decide what to study today (write it on the exam prep page)", "Study it", "Note what's still unclear"],
+        materials: ["Your notes, slides and readings for this exam"],
+        tip: "Test yourself instead of re-reading — recalling is what makes it stick.",
+        examDay: day,
+      };
+    }
     if (day && day.kind !== "exam") {
       return {
         heading: `Day ${day.dayNumber} · ${day.title}`,

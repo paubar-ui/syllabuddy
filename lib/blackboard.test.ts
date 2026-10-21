@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   applyCalendar,
+  CALENDAR_VERSION,
+  classesOn,
+  openCalendarDeadlines,
+  extractDeadlines,
   busyMinutesByDate,
   classCount,
   courseNameOf,
@@ -150,11 +154,13 @@ describe("links", () => {
     expect(normalizeCalendarUrl("not a link")).toBeNull();
   });
 
-  it("re-syncs a link at most every 6 hours", () => {
+  it("re-syncs a link at most every 6 hours, and right away if it was read by an older version", () => {
     const now = new Date("2026-10-20T12:00:00Z");
-    expect(needsResync({ ...sync, url: "https://x.edu/a.ics" }, now)).toBe(true);
-    expect(needsResync({ ...sync, url: "https://x.edu/a.ics", lastSync: "2026-10-20T07:00:00Z" }, now)).toBe(false);
-    expect(needsResync({ ...sync, url: "https://x.edu/a.ics", lastSync: "2026-10-20T05:59:00Z" }, now)).toBe(true);
+    const linked = { ...sync, url: "https://x.edu/a.ics", version: CALENDAR_VERSION };
+    expect(needsResync(linked, now)).toBe(true);
+    expect(needsResync({ ...linked, lastSync: "2026-10-20T07:00:00Z" }, now)).toBe(false);
+    expect(needsResync({ ...linked, lastSync: "2026-10-20T05:59:00Z" }, now)).toBe(true);
+    expect(needsResync({ ...linked, lastSync: "2026-10-20T11:00:00Z", version: undefined }, now)).toBe(true);
     expect(needsResync({ ...sync, fileName: "cal.ics" }, now)).toBe(false);
   });
 });
@@ -238,5 +244,71 @@ describe("IE delivery tags: “Live in-person”, “Asynchronous”, “Extra�
     const busy = busyMinutesByDate({ courses: grouped, mapping: {} });
     expect(busy["2026-09-09"]).toBeUndefined(); // asynchronous evening session
     expect(busy["2026-09-11"]).toBe(110); // extra session 19:00–20:20 → busy 18:45–20:35
+  });
+});
+
+describe("deadlines in the calendar", () => {
+  const ev = (summary: string, start: string, end: string, allDay = false) => ({
+    uid: `${summary}${start}`,
+    summary,
+    start,
+    end,
+    allDay,
+  });
+  const events = [
+    ev("Deadline of Watch video - Session 19a: Globalisation", "2026-10-22T23:59", "2026-10-22T23:59"),
+    ev("H5: Hypothesis hand-in", "2026-11-03T23:59", "2026-11-03T23:59"),
+    ev("Midterm Exam", "2026-11-10T19:00", "2026-11-10T19:00"),
+    ev("Old essay", "2026-10-01T23:59", "2026-10-01T23:59"),
+    ev("## CANCELLED ## Quiz 2", "2026-11-05T23:59", "2026-11-05T23:59"),
+    ev("National holiday", "2026-11-01", "2026-11-02", true),
+    ev("LANGUAGES EXAM PREPARATION  (Ses. 2) Live online ", "2026-11-12T19:30", "2026-11-12T21:00"),
+  ];
+
+  it("lists upcoming hand-ins and exams, not classes, holidays, cancelled or past ones", () => {
+    expect(extractDeadlines(events, "2026-10-21")).toEqual([
+      { uid: events[0].uid, title: "Watch video - Session 19a: Globalisation", date: "2026-10-22" },
+      { uid: events[1].uid, title: "H5: Hypothesis hand-in", date: "2026-11-03" },
+      { uid: events[2].uid, title: "Midterm Exam", date: "2026-11-10" },
+    ]);
+  });
+
+  it("a session number makes it a class, even with “exam” in the name", () => {
+    expect(groupClassSessions(events).map((c) => c.name)).toEqual(["LANGUAGES EXAM PREPARATION"]);
+  });
+});
+
+describe("classes and deadlines for the plan", () => {
+  it("lists a day's classes once each (double sessions too), with your course name when matched", () => {
+    const cc = {
+      key: "eco",
+      name: "ECONOMETRICS",
+      sessions: [
+        { number: 3, date: "2026-10-21", start: "16:30", end: "19:20" },
+        { number: 4, date: "2026-10-21", start: "16:30", end: "19:20" },
+        { number: 0, date: "2026-10-21", start: "09:00", end: "10:20", async: true },
+      ],
+    };
+    const day = classesOn({ courses: [cc], mapping: { eco: "c1" } }, "2026-10-21", [
+      { id: "c1", name: "Econometrics" },
+    ]);
+    expect(day.map((c) => [c.start, c.name, c.number, c.async])).toEqual([
+      ["09:00", "Econometrics", 0, true],
+      ["16:30", "Econometrics", 3, false],
+    ]);
+  });
+
+  it("hides calendar deadlines you added, ignored or that are past", () => {
+    const sync = {
+      courses: [],
+      mapping: {},
+      deadlines: [
+        { uid: "a", title: "H5", date: "2026-10-30" },
+        { uid: "b", title: "H6", date: "2026-11-06" },
+        { uid: "c", title: "Old", date: "2026-10-01" },
+      ],
+      handled: { a: "added" as const },
+    };
+    expect(openCalendarDeadlines(sync, "2026-10-21").map((d) => d.uid)).toEqual(["b"]);
   });
 });

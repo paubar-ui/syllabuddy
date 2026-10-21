@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SessionDetail } from "@/components/SessionDetail";
 import { CalendarCard } from "@/components/CalendarCard";
+import { CalendarDeadlines } from "@/components/plan/CalendarDeadlines";
 import { Callout, EmptyState, HowItWorks, PageHeader } from "@/components/kit";
 import { buttonPrimary, buttonSecondary, card, pageWide } from "@/components/ui";
 import { addDaysISO, todayISO } from "@/lib/dates";
+import { classesOn, studyStartMinute } from "@/lib/blackboard";
 import { buildIcs } from "@/lib/ics";
 import { heatLevel, weekDays, weeksBetween, weekStart, workloadByDay } from "@/lib/plan";
 import { useStore } from "@/lib/store";
@@ -48,6 +50,7 @@ function PlanContent() {
   const [monday, setMonday] = useState(() => weekStart(today));
   const [exported, setExported] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const calendar = useStore((s) => s.calendar);
 
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const deliverableById = useMemo(() => new Map(deliverables.map((d) => [d.id, d])), [deliverables]);
@@ -64,13 +67,13 @@ function PlanContent() {
               <Link href="/app" className={buttonPrimary}>
                 Add a deadline
               </Link>
-              <Link href="/onboarding" className={buttonSecondary}>
-                Add a course from a syllabus
+              <Link href="/courses" className={buttonSecondary}>
+                Add your courses
               </Link>
             </>
           }
         >
-          Add your first deadline on Today (or a whole syllabus) and your week will fill in here automatically.
+          Add your first deadline on Today (or your courses) and your week will fill in here automatically.
         </EmptyState>
         <div className="mt-6">
           <CalendarCard where="plan" />
@@ -80,7 +83,14 @@ function PlanContent() {
   }
 
   function exportCalendar() {
-    const ics = buildIcs({ courses, deliverables, blocks, now: new Date() });
+    // Study starts after your evening classes, like on Today — so nothing clashes with class.
+    const ics = buildIcs({
+      courses,
+      deliverables,
+      blocks,
+      now: new Date(),
+      startMinuteFor: (date) => studyStartMinute(calendar, date),
+    });
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
@@ -119,6 +129,7 @@ function PlanContent() {
         </Callout>
       )}
       <CalendarSlot />
+      <CalendarDeadlines today={today} />
 
       {/* ---------------- Week view ---------------- */}
       <section aria-labelledby="week-title">
@@ -128,7 +139,8 @@ function PlanContent() {
               Week of {pretty(monday, "d MMMM")}
             </h2>
             <p className="text-sm text-muted">
-              {hoursText(weekMinutes)} planned this week. Use the arrows to look ahead; the coloured edge shows the
+              {hoursText(weekMinutes)} planned this week. Use the arrows to look ahead;
+              {calendar ? " grey dashed boxes are your classes from Blackboard;" : ""} the coloured edge shows the
               course, red labels are deadlines.
             </p>
           </div>
@@ -155,6 +167,7 @@ function PlanContent() {
         <ol className="mt-4 grid gap-3 lg:grid-cols-7">
           {days.map((day) => {
             const dayBlocks = blocks.filter((b) => b.date === day);
+            const dayClasses = classesOn(calendar, day, courses);
             const due = deliverables.filter((d) => !d.done && d.dueDate === day);
             const isToday = day === today;
             return (
@@ -180,6 +193,20 @@ function PlanContent() {
                       className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-xs font-semibold text-danger"
                     >
                       Due: {d.title}
+                    </li>
+                  ))}
+                  {dayClasses.map((c) => (
+                    <li
+                      key={`${c.key}-${c.start}`}
+                      className="rounded-md border border-dashed border-line bg-surface-2 px-2 py-1 text-xs text-muted"
+                    >
+                      <span className="block font-medium text-ink">
+                        {c.async ? "Online, any time" : `${c.start}–${c.end}`} · Class
+                      </span>
+                      <span className="block break-words">
+                        {c.name}
+                        {c.number > 0 && ` · Ses. ${c.number}`}
+                      </span>
                     </li>
                   ))}
                   {dayBlocks.map((b) => {
@@ -211,7 +238,9 @@ function PlanContent() {
                       </li>
                     );
                   })}
-                  {dayBlocks.length === 0 && due.length === 0 && <li className="text-xs text-muted">Free</li>}
+                  {dayBlocks.length === 0 && due.length === 0 && dayClasses.length === 0 && (
+                    <li className="text-xs text-muted">Free</li>
+                  )}
                 </ul>
               </li>
             );

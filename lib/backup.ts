@@ -13,6 +13,8 @@ const sessionSchema = z.object({
   concepts: z.array(z.string()),
   readings: z.array(z.string()),
   problemSets: z.array(z.string()),
+  upTo: z.number().optional(),
+  practice: z.string().optional(),
 });
 
 const level = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
@@ -28,6 +30,8 @@ const examSchema = z.object({
   mockLog: z
     .array(z.object({ session: z.number(), points: z.number().min(0), reason: z.enum(["concept", "algebra", "time"]) }))
     .optional(),
+  myPlan: z.record(z.string(), z.string().max(4000)).optional(),
+  topics: z.array(sessionSchema).optional(),
 });
 
 const dataSchema = z.object({
@@ -41,6 +45,8 @@ const dataSchema = z.object({
       gradeScale: z.number().positive(),
       attendancePolicy: z.string().optional(),
       sessions: z.array(sessionSchema).optional(),
+      examInfo: z.partialRecord(z.enum(["exam", "midterm", "final"]), examSchema).optional(),
+      studyMode: z.enum(["auto", "self"]).optional(),
     }),
   ),
   deliverables: z.array(

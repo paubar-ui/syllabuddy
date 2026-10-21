@@ -1,4 +1,5 @@
-// Calendar export (CLAUDE.md §5.8): one event per planned study block (back to back from 18:00)
+// Calendar export (CLAUDE.md §5.8): one event per planned study block (back to back from 18:00,
+// or from 15 minutes after an evening class when the Blackboard calendar is connected)
 // and one all-day event per deadline. Follows RFC 5545: CRLF line endings, UID + DTSTAMP on
 // every event, escaped text and lines folded at 75 bytes. Times are "floating" local times,
 // so 18:00 stays 18:00 in whatever time zone your calendar uses.
@@ -11,6 +12,8 @@ export interface IcsInput {
   blocks: StudyBlock[];
   now: Date;
   startHour?: number;
+  /** When study can start on a day, in minutes after midnight (e.g. after an evening class). */
+  startMinuteFor?: (date: string) => number;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -58,7 +61,7 @@ export function foldLine(line: string): string {
   return parts.join("\r\n ");
 }
 
-export function buildIcs({ courses, deliverables, blocks, now, startHour = 18 }: IcsInput): string {
+export function buildIcs({ courses, deliverables, blocks, now, startHour = 18, startMinuteFor }: IcsInput): string {
   const stamp = icsUtc(now);
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
   const deliverableById = new Map(deliverables.map((d) => [d.id, d]));
@@ -79,7 +82,7 @@ export function buildIcs({ courses, deliverables, blocks, now, startHour = 18 }:
   for (const block of planned) {
     if (block.date !== currentDate) {
       currentDate = block.date;
-      cursor = startHour * 60;
+      cursor = startMinuteFor?.(block.date) ?? startHour * 60;
     }
     const d = deliverableById.get(block.deliverableId);
     const course = d ? courseName.get(d.courseId) : undefined;

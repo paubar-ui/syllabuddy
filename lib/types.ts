@@ -23,7 +23,13 @@ export interface Course {
   gradeScale: number; // e.g. 10 or 100
   attendancePolicy?: string; // raw text from syllabus, optional
   sessions?: CourseSession[]; // session-by-session schedule from the syllabus (V2-6)
+  /** Exam format, length, materials and coverage read from the syllabus, per exam type. */
+  examInfo?: Partial<Record<ExamKind, ExamDetails>>;
+  /** "auto": Syllabuddy organises exam study from the syllabus; "self": you write your own plan. */
+  studyMode?: "auto" | "self";
 }
+
+export type ExamKind = "exam" | "midterm" | "final";
 
 /** One class session from the syllabus schedule. */
 export interface CourseSession {
@@ -33,6 +39,8 @@ export interface CourseSession {
   concepts: string[]; // sub-topics / key concepts
   readings: string[];
   problemSets: string[]; // e.g. "PS3", "Problem set 4"
+  upTo?: number; // a block of several sessions: "Sessions 5–6" → number 5, upTo 6
+  practice?: string; // what's done in class: "Seminar: Problem Set 2 — Edgeworth box"
 }
 
 export type MistakeReason = "concept" | "algebra" | "time";
@@ -54,6 +62,10 @@ export interface ExamDetails {
   focus?: Record<number, "core" | "light">;
   confidence?: Record<number, 1 | 2 | 3 | 4 | 5>;
   mockLog?: MockMistake[];
+  /** "I'll organise it myself": what you plan to study, per day (ISO date → your text). */
+  myPlan?: Record<string, string>;
+  /** What you need to study for this exam, pasted by you and split into topics. */
+  topics?: CourseSession[];
 }
 
 export interface Deliverable {
@@ -129,4 +141,17 @@ export interface CalendarSync {
   courses: CalendarCourse[];
   /** Blackboard course key → Syllabuddy course id ("" = not matched). */
   mapping: Record<string, string>;
+  /** Upcoming deadlines found in the calendar (Blackboard doesn't say which course they're for). */
+  deadlines?: CalendarDeadline[];
+  /** What you did with each calendar deadline: added to a course, or ignored. */
+  handled?: Record<string, "added" | "ignored">;
+  /** How the calendar was read; older versions are re-read automatically. */
+  version?: number;
+}
+
+/** A deadline event in the Blackboard calendar ("H5: Hypothesis hand-in", "Midterm Exam"). */
+export interface CalendarDeadline {
+  uid: string;
+  title: string;
+  date: string; // ISO date
 }

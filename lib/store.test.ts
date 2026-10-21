@@ -127,12 +127,62 @@ describe("store", () => {
   });
 
   it("setCourses computes estimates; a new effort level updates them", () => {
-    useStore.getState().setCourses(
-      [{ id: "c1", name: "Stats", color: "#000", effort: 3, gradeScale: 10 }],
-      [{ id: "d1", courseId: "c1", title: "Final", type: "final", dueDate: "2026-12-01", weight: 40, loggedMinutes: 0, done: false }],
-    );
+    useStore
+      .getState()
+      .setCourses(
+        [{ id: "c1", name: "Stats", color: "#000", effort: 3, gradeScale: 10 }],
+        [
+          {
+            id: "d1",
+            courseId: "c1",
+            title: "Final",
+            type: "final",
+            dueDate: "2026-12-01",
+            weight: 40,
+            loggedMinutes: 0,
+            done: false,
+          },
+        ],
+      );
     expect(useStore.getState().deliverables[0].estimatedHours).toBe(18);
     useStore.getState().updateCourse("c1", { effort: 5 });
     expect(useStore.getState().deliverables[0].estimatedHours).toBe(29);
+  });
+});
+
+describe("course folders", () => {
+  beforeEach(() => useStore.getState().reset());
+
+  it("adds a course by name, then deadlines with a chosen type into it", () => {
+    const s = useStore.getState();
+    const course = s.addCourse("  Behavioral Economics ", 4);
+    expect(useStore.getState().courses).toEqual([course]);
+    expect(course).toMatchObject({ name: "Behavioral Economics", effort: 4, gradeScale: 10 });
+    const d = useStore
+      .getState()
+      .addDeadline(
+        { title: "Reading reflection", type: "essay", dueDate: "2026-11-10", courseId: course.id, weight: 15 },
+        "2026-10-21",
+      );
+    expect(d).toMatchObject({ courseId: course.id, type: "essay", weight: 15 });
+  });
+
+  it("a new course replaces the sample semester", () => {
+    useStore.getState().loadDemo("2026-10-21");
+    useStore.getState().addCourse("Public Economics");
+    expect(useStore.getState().courses.map((c) => c.name)).toEqual(["Public Economics"]);
+    expect(useStore.getState().isDemo).toBe(false);
+  });
+
+  it("deleting a course removes its deadlines and planned blocks", () => {
+    const course = useStore.getState().addCourse("Finance");
+    const other = useStore.getState().addCourse("Law");
+    useStore.getState().addDeadline({ title: "PS1", dueDate: "2026-11-10", courseId: course.id }, "2026-10-21");
+    useStore.getState().addDeadline({ title: "Case", dueDate: "2026-11-12", courseId: other.id }, "2026-10-21");
+    useStore.getState().removeCourse(course.id, "2026-10-21");
+    const st = useStore.getState();
+    expect(st.courses.map((c) => c.name)).toEqual(["Law"]);
+    expect(st.deliverables.map((d) => d.title)).toEqual(["Case"]);
+    expect(st.blocks.every((b) => st.deliverables.some((d) => d.id === b.deliverableId))).toBe(true);
   });
 });

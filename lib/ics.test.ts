@@ -39,6 +39,19 @@ describe("buildIcs", () => {
     expect(events[1]).toContain("DTSTART:20261110T190000\r\nDTEND:20261110T194500");
   });
 
+  it("starts a day's study after an evening class when told to", () => {
+    const shifted = buildIcs({
+      courses,
+      deliverables,
+      blocks,
+      now,
+      startMinuteFor: (date) => (date === "2026-11-10" ? 19 * 60 + 35 : 18 * 60),
+    }).split("BEGIN:VEVENT");
+    expect(shifted[1]).toContain("DTSTART:20261110T193500\r\nDTEND:20261110T203500");
+    expect(shifted[2]).toContain("DTSTART:20261110T203500\r\nDTEND:20261110T212000");
+    expect(shifted[3]).toContain("DTSTART:20261111T180000");
+  });
+
   it("rolls a very long evening into the next day correctly", () => {
     expect(events[2]).toContain("DTSTART:20261111T180000\r\nDTEND:20261112T004000");
   });
